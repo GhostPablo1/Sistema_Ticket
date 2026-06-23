@@ -37,8 +37,17 @@ def get_valid_database_path():
     print("ERROR CRÍTICO: No se pudo encontrar una ubicación para la base de datos.", file=sys.stderr)
     sys.exit(1)
 
+import os
+
+# 1. Intentamos obtener la ruta normal
 db_path = get_valid_database_path()
-db_uri = 'sqlite:///' + db_path.replace('\\', '/')
+
+# 2. 🚨 SALVAVIDAS PARA RENDER: Si detecta que está en Linux/Render, fuerza una ruta relativa
+if os.environ.get('RENDER') or not db_path.startswith(('C:', 'D:')):
+    db_uri = 'sqlite:///test.db'
+else:
+    db_uri = 'sqlite:///' + db_path.replace('\\', '/')
+
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 print(f"📁 URI final: {db_uri}", file=sys.stderr)
