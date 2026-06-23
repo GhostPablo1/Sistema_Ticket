@@ -64,6 +64,21 @@ def _env_bool(name, default=False):
 # ============================================================
 # CONFIGURACIÓN DE CORREO
 # ============================================================
+def _ensure_usuario_columns():
+    with db.engine.begin() as conn:
+        columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(usuarios)")).fetchall()
+        }
+        if 'activo' not in columns:
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN activo BOOLEAN DEFAULT 1"))
+        if 'email_verificado' not in columns:
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN email_verificado BOOLEAN DEFAULT 0"))
+        conn.execute(text(
+            "UPDATE usuarios SET email_verificado = 1 WHERE email_verificado IS NULL OR email_verificado = 0"
+        ))
+
+
 app.config['MAIL_SERVER']         = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']           = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']        = _env_bool('MAIL_USE_TLS', True)
@@ -92,6 +107,7 @@ def load_user(user_id):
 # ==================== INIT DB ====================
 with app.app_context():
     db.create_all()
+    _ensure_usuario_columns()
 
     # Migración: columna activo
     try:
@@ -260,11 +276,18 @@ def register():
             flash('Ya existe una cuenta con ese correo electrónico.', 'danger')
             return render_template('register.html')
 
-        nuevo = Usuario(nombre=nombre, email=email, password=password,
-                        rol='usuario', area=area, activo=True,
-                        email_verificado=False)
-        db.session.add(nuevo)
-        db.session.commit()
+        try:
+            _ensure_usuario_columns()
+            nuevo = Usuario(nombre=nombre, email=email, password=password,
+                            rol='usuario', area=area, activo=True,
+                            email_verificado=False)
+            db.session.add(nuevo)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creando usuario: {e}", file=sys.stderr)
+            flash('No se pudo crear la cuenta. Intenta nuevamente en unos minutos.', 'danger')
+            return render_template('register.html')
 
         session['pending_email'] = email
         try:
