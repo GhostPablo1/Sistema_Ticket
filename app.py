@@ -1,6 +1,9 @@
 import os
 import sys
 import sqlite3
+import json
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
@@ -71,6 +74,8 @@ app.config['MAIL_USE_SSL']        = _env_bool('MAIL_USE_SSL', False)
 app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD', '').replace(' ', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME']
+app.config['RESEND_API_KEY']      = os.environ.get('RESEND_API_KEY')
+app.config['RESEND_FROM']         = os.environ.get('RESEND_FROM', 'TicketIA Bellavista <onboarding@resend.dev>')
 
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -149,26 +154,54 @@ def _mail_sender():
     return app.config['MAIL_USERNAME'] or app.config['MAIL_DEFAULT_SENDER']
 
 
+def _send_email(subject, recipient, html):
+    if app.config['RESEND_API_KEY']:
+        payload = json.dumps({
+            'from': app.config['RESEND_FROM'],
+            'to': [recipient],
+            'subject': subject,
+            'html': html,
+        }).encode('utf-8')
+        req = urlrequest.Request(
+            'https://api.resend.com/emails',
+            data=payload,
+            headers={
+                'Authorization': f"Bearer {app.config['RESEND_API_KEY']}",
+                'Content-Type': 'application/json',
+                'User-Agent': 'TicketIA/1.0',
+            },
+            method='POST',
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=15) as response:
+                if response.status >= 400:
+                    raise RuntimeError(f'Resend error HTTP {response.status}')
+        except HTTPError as e:
+            detail = e.read().decode('utf-8', errors='replace')
+            raise RuntimeError(f'Resend error HTTP {e.code}: {detail}') from e
+        except URLError as e:
+            raise RuntimeError(f'Resend connection error: {e.reason}') from e
+        return
+
+    msg = Message(subject, sender=_mail_sender(), recipients=[recipient])
+    msg.html = html
+    mail.send(msg)
+
+
 def _send_verification_email(usuario):
     token = serializer.dumps(usuario.email, salt=SALT_VERIFICACION)
     link  = url_for('verificar_email', token=token, _external=True)
-    msg   = Message('Confirma tu cuenta — TicketIA Bellavista',
-                    sender=_mail_sender(),
-                    recipients=[usuario.email])
-    msg.html = render_template('emails/verificar_cuenta.html',
-                               nombre=usuario.nombre, link=link)
-    mail.send(msg)
+    html = render_template('emails/verificar_cuenta.html',
+                           nombre=usuario.nombre, link=link)
+    _send_email('Confirma tu cuenta — TicketIA Bellavista', usuario.email, html)
 
 
 def _send_reset_email(usuario):
     token = serializer.dumps(usuario.email, salt=SALT_RESET)
     link  = url_for('reset_password', token=token, _external=True)
-    msg   = Message('Recupera tu contraseña — TicketIA Bellavista',
-                    sender=_mail_sender(),
-                    recipients=[usuario.email])
-    msg.html = render_template('emails/reset_password.html',
-                               nombre=usuario.nombre, link=link)
-    mail.send(msg)
+    html = render_template('emails/reset_password.html',
+                           nombre=usuario.nombre, link=link)
+    _send_email('Recupera tu contraseña — TicketIA Bellavista', usuario.email, html)
 
 
 # ==================== RUTAS PÚBLICAS ====================
