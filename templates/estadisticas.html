@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Estadísticas - Sistema de Ticket Municipalidad de Bellavista{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div>
+        <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
+            <a href="{{ url_for('dashboard_tecnico') }}" class="hover:text-blue-700 flex items-center gap-1">
+                <i class="fas fa-arrow-left text-xs"></i> Dashboard
+            </a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <span class="text-gray-800 font-medium">Estadísticas</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800">Reportes y Estadísticas</h1>
+        <p class="text-gray-500 text-sm">Análisis del sistema de tickets</p>
+    </div>
+    <div class="text-sm text-gray-500 bg-white border border-gray-200 px-4 py-2 rounded-xl">
+        <i class="fas fa-database text-blue-600 mr-2"></i>
+        Total: <strong class="text-gray-800">{{ total }}</strong> tickets
+    </div>
+</div>
+
+<!-- KPI row -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    {% for estado, count in por_estado %}
+    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <div class="text-xs font-semibold text-gray-500 uppercase mb-2">{{ estado }}</div>
+        <div class="text-3xl font-bold
+            {% if estado == 'Pendiente' %}text-yellow-600
+            {% elif estado == 'En Proceso' %}text-blue-600
+            {% elif estado == 'Resuelto' %}text-green-600
+            {% else %}text-gray-600{% endif %}">{{ count }}</div>
+        {% if total > 0 %}
+        <div class="text-gray-400 text-xs mt-1">{{ "%.0f"|format(count/total*100) }}% del total</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Charts row -->
+<div class="grid md:grid-cols-2 gap-6 mb-8">
+
+    <!-- Por Categoría -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <i class="fas fa-tags text-blue-600"></i> Tickets por Categoría
+        </h3>
+        <div class="relative" style="height: 280px;">
+            <canvas id="chartCategorias"></canvas>
+        </div>
+    </div>
+
+    <!-- Por Estado -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <i class="fas fa-chart-pie text-indigo-600"></i> Tickets por Estado
+        </h3>
+        <div class="relative" style="height: 280px;">
+            <canvas id="chartEstados"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Por Prioridad + Tabla detalle -->
+<div class="grid md:grid-cols-3 gap-6">
+
+    <!-- Por Prioridad -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <i class="fas fa-exclamation-triangle text-yellow-500"></i> Por Prioridad
+        </h3>
+        <div class="relative" style="height: 200px;">
+            <canvas id="chartPrioridad"></canvas>
+        </div>
+    </div>
+
+    <!-- Tabla categorías -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <i class="fas fa-list text-green-600"></i> Detalle Categorías
+        </h3>
+        <div class="space-y-2">
+            {% for cat, count in por_categoria %}
+            <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                <div class="flex items-center gap-2">
+                    <i class="fas {% if cat == 'impresora' %}fa-print
+                                 {% elif cat == 'internet' %}fa-wifi
+                                 {% elif cat == 'computadora' %}fa-desktop
+                                 {% elif cat == 'software' %}fa-code
+                                 {% else %}fa-tools{% endif %} text-gray-400 w-4"></i>
+                    <span class="text-sm text-gray-700 capitalize">{{ cat or 'Sin categoría' }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="bg-blue-100 rounded-full h-2 w-16 overflow-hidden">
+                        {% if total > 0 %}
+                        <div class="bg-blue-600 h-full rounded-full" style="width: {{ (count/total*100)|int }}%"></div>
+                        {% endif %}
+                    </div>
+                    <span class="text-sm font-bold text-gray-800 w-5 text-right">{{ count }}</span>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-gray-400 text-sm">Sin datos</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tabla estados -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <i class="fas fa-tasks text-purple-600"></i> Detalle Estados
+        </h3>
+        <div class="space-y-2">
+            {% for estado, count in por_estado %}
+            <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                <span class="badge
+                    {% if estado == 'Pendiente' %}badge-pendiente
+                    {% elif estado == 'En Proceso' %}badge-proceso
+                    {% elif estado == 'Resuelto' %}badge-resuelto
+                    {% else %}badge-cerrado{% endif %}">
+                    {{ estado }}
+                </span>
+                <div class="flex items-center gap-2">
+                    <div class="bg-gray-100 rounded-full h-2 w-16 overflow-hidden">
+                        {% if total > 0 %}
+                        <div class="h-full rounded-full
+                            {% if estado == 'Pendiente' %}bg-yellow-500
+                            {% elif estado == 'En Proceso' %}bg-blue-500
+                            {% elif estado == 'Resuelto' %}bg-green-500
+                            {% else %}bg-gray-400{% endif %}"
+                            style="width: {{ (count/total*100)|int }}%"></div>
+                        {% endif %}
+                    </div>
+                    <span class="text-sm font-bold text-gray-800 w-5 text-right">{{ count }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const categorias = {{ por_categoria | tojson }};
+const estados = {{ por_estado | tojson }};
+const prioridades = {{ por_prioridad | tojson }};
+
+const CAT_COLORS = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2'];
+const EST_COLORS = { 'Pendiente':'#f59e0b','En Proceso':'#3b82f6','Resuelto':'#10b981','Cerrado':'#6b7280' };
+const PRI_COLORS = { 'Alta':'#ef4444','Media':'#f59e0b','Baja':'#10b981' };
+
+// Chart Categorías (bar)
+new Chart(document.getElementById('chartCategorias'), {
+    type: 'bar',
+    data: {
+        labels: categorias.map(c => c[0] ? c[0].charAt(0).toUpperCase() + c[0].slice(1) : 'Sin cat.'),
+        datasets: [{
+            label: 'Tickets',
+            data: categorias.map(c => c[1]),
+            backgroundColor: CAT_COLORS,
+            borderRadius: 8,
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+            x: { grid: { display: false } }
+        }
+    }
+});
+
+// Chart Estados (doughnut)
+new Chart(document.getElementById('chartEstados'), {
+    type: 'doughnut',
+    data: {
+        labels: estados.map(e => e[0]),
+        datasets: [{
+            data: estados.map(e => e[1]),
+            backgroundColor: estados.map(e => EST_COLORS[e[0]] || '#6b7280'),
+            borderWidth: 3,
+            borderColor: '#fff',
+            hoverOffset: 8
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true } }
+        },
+        cutout: '65%'
+    }
+});
+
+// Chart Prioridad (pie)
+new Chart(document.getElementById('chartPrioridad'), {
+    type: 'pie',
+    data: {
+        labels: prioridades.map(p => p[0]),
+        datasets: [{
+            data: prioridades.map(p => p[1]),
+            backgroundColor: prioridades.map(p => PRI_COLORS[p[0]] || '#6b7280'),
+            borderWidth: 3,
+            borderColor: '#fff',
+            hoverOffset: 6
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 11 } } }
+        }
+    }
+});
+</script>
+{% endblock %}

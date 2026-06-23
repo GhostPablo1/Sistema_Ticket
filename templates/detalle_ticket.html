@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket.id }} - Sistema de Ticket Municipalidad de Bellavista{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-500 mb-5">
+    <a href="{{ url_for('dashboard_usuario') if current_user.rol=='usuario' else url_for('dashboard_tecnico') }}"
+       class="hover:text-blue-700 flex items-center gap-1">
+        <i class="fas fa-arrow-left text-xs"></i>
+        <span>{{ 'Mis Tickets' if current_user.rol=='usuario' else 'Dashboard' }}</span>
+    </a>
+    <i class="fas fa-chevron-right text-xs"></i>
+    <span class="text-gray-800 font-medium">Ticket #{{ ticket.id }}</span>
+</div>
+
+<div class="grid lg:grid-cols-5 gap-6">
+
+    <!-- ===== INFO DEL TICKET (3/5) ===== -->
+    <div class="lg:col-span-3 space-y-5">
+
+        <!-- Header ticket -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-900 to-blue-800 px-6 py-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-blue-300 text-xs mb-1">Ticket #{{ ticket.id }}</div>
+                        <h1 class="text-white font-bold text-xl leading-tight">{{ ticket.titulo }}</h1>
+                    </div>
+                    <span class="badge flex-shrink-0 mt-1
+                        {% if ticket.estado == 'Pendiente' %}badge-pendiente
+                        {% elif ticket.estado == 'En Proceso' %}badge-proceso
+                        {% elif ticket.estado == 'Resuelto' %}badge-resuelto
+                        {% else %}badge-cerrado{% endif %}">
+                        {{ ticket.estado }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Info grid -->
+            <div class="p-6">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Solicitante</div>
+                        <div class="font-semibold text-gray-800 text-sm">{{ ticket.creador.nombre }}</div>
+                        <div class="text-gray-500 text-xs">{{ ticket.creador.area or '' }}</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Técnico</div>
+                        {% if ticket.tecnico %}
+                        <div class="font-semibold text-gray-800 text-sm">{{ ticket.tecnico.nombre }}</div>
+                        <div class="text-green-600 text-xs">Asignado</div>
+                        {% else %}
+                        <div class="font-semibold text-gray-500 text-sm">Sin asignar</div>
+                        <div class="text-yellow-600 text-xs">Pendiente</div>
+                        {% endif %}
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Categoría</div>
+                        <div class="font-semibold text-gray-800 text-sm capitalize flex items-center gap-1">
+                            <i class="fas {% if ticket.categoria == 'impresora' %}fa-print
+                                         {% elif ticket.categoria == 'internet' %}fa-wifi
+                                         {% elif ticket.categoria == 'computadora' %}fa-desktop
+                                         {% elif ticket.categoria == 'software' %}fa-code
+                                         {% else %}fa-tools{% endif %} text-blue-500 text-xs"></i>
+                            {{ ticket.categoria or '—' }}
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Prioridad</div>
+                        <span class="badge
+                            {% if ticket.prioridad == 'Alta' %}badge-alta
+                            {% elif ticket.prioridad == 'Media' %}badge-media
+                            {% else %}badge-baja{% endif %}">
+                            {{ ticket.prioridad }}
+                        </span>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Creado</div>
+                        <div class="font-semibold text-gray-800 text-sm">{{ ticket.fecha_creacion.strftime('%d/%m/%Y') }}</div>
+                        <div class="text-gray-500 text-xs">{{ ticket.fecha_creacion.strftime('%H:%M') }}</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <div class="text-xs text-gray-400 font-medium mb-1">Resuelto</div>
+                        {% if ticket.fecha_resolucion %}
+                        <div class="font-semibold text-green-700 text-sm">{{ ticket.fecha_resolucion.strftime('%d/%m/%Y') }}</div>
+                        {% else %}
+                        <div class="font-semibold text-gray-400 text-sm">—</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Descripción -->
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <div class="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">
+                        <i class="fas fa-align-left mr-1"></i> Descripción del problema
+                    </div>
+                    <p class="text-gray-700 text-sm leading-relaxed">{{ ticket.descripcion }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acciones para técnico -->
+        {% if current_user.rol == 'tecnico' %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="fas fa-tools text-blue-600"></i> Gestión del Ticket
+            </h3>
+            <div class="flex flex-wrap gap-3">
+                <!-- Cambiar estado -->
+                <form method="POST" action="{{ url_for('update_ticket_estado', ticket_id=ticket.id) }}" class="flex items-center gap-2">
+                    <label class="text-sm text-gray-600 font-medium">Estado:</label>
+                    <select name="estado" onchange="this.form.submit()"
+                            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="Pendiente" {% if ticket.estado=='Pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="En Proceso" {% if ticket.estado=='En Proceso' %}selected{% endif %}>En Proceso</option>
+                        <option value="Resuelto" {% if ticket.estado=='Resuelto' %}selected{% endif %}>Resuelto</option>
+                        <option value="Cerrado" {% if ticket.estado=='Cerrado' %}selected{% endif %}>Cerrado</option>
+                    </select>
+                </form>
+
+                {% if not ticket.tecnico_id %}
+                <form method="POST" action="{{ url_for('asignar_ticket', ticket_id=ticket.id) }}">
+                    <button type="submit"
+                            class="bg-yellow-500 hover:bg-yellow-400 text-white font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                        <i class="fas fa-user-check"></i> Asignarme este ticket
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if ticket.estado not in ['Cerrado'] %}
+                <a href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
+                   onclick="return confirm('¿Cerrar este ticket?')"
+                   class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                    <i class="fas fa-times-circle"></i> Cerrar
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Acciones para usuario -->
+        {% if current_user.rol == 'usuario' and ticket.usuario_id == current_user.id %}
+        {% if ticket.estado not in ['Cerrado', 'Resuelto'] %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="font-semibold text-gray-800 text-sm">¿El problema fue resuelto?</h3>
+                    <p class="text-gray-500 text-xs mt-0.5">Si ya no necesitas soporte, puedes cerrar este ticket.</p>
+                </div>
+                <a href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
+                   onclick="return confirm('¿Confirmas que el problema fue resuelto?')"
+                   class="bg-green-600 hover:bg-green-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 flex-shrink-0">
+                    <i class="fas fa-check"></i> Marcar como resuelto
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+
+    </div>
+
+    <!-- ===== ASISTENTE IA (2/5) ===== -->
+    {% if current_user.rol == 'usuario' and ticket.usuario_id == current_user.id %}
+    <div class="lg:col-span-2">
+        <div class="bg-gradient-to-b from-blue-900 to-indigo-900 rounded-2xl shadow-lg overflow-hidden flex flex-col sticky top-20" style="height: 580px;">
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-robot text-blue-900 text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-white font-bold">Asistente IA</div>
+                        <div class="text-blue-300 text-xs flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>
+                            Soporte inmediato
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat -->
+            <div id="chatConversacion" class="flex-1 p-4 overflow-y-auto scrollbar-thin space-y-3">
+                {% for msg in mensajes_ia %}
+                <div class="flex justify-end fade-in">
+                    <div class="ia-bubble-user px-4 py-3 text-sm max-w-xs">{{ msg.usuario_pregunta }}</div>
+                </div>
+                <div class="fade-in">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fas fa-robot text-blue-900 text-xs"></i>
+                        </div>
+                        <div class="ia-bubble-bot px-4 py-3 text-sm max-w-xs text-gray-700 whitespace-pre-line">{{ msg.ia_respuesta }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div id="welcomeMsg" class="fade-in">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fas fa-robot text-blue-900 text-xs"></i>
+                        </div>
+                        <div class="ia-bubble-bot px-4 py-3 text-sm max-w-xs text-gray-700">
+                            Hola <strong>{{ current_user.nombre.split()[0] }}</strong>! Voy a analizar tu problema y darte soluciones mientras el técnico llega. Dame un momento...
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <div id="typingIndicator" class="hidden">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-robot text-blue-900 text-xs"></i>
+                        </div>
+                        <div class="ia-bubble-bot px-4 py-3 text-sm text-gray-500 flex items-center gap-2">
+                            <i class="fas fa-circle-notch fa-spin text-blue-500"></i> Analizando...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input -->
+            <div class="p-4 border-t border-white/10 bg-white/5">
+                <form id="chatForm" class="flex gap-2">
+                    <input type="text" id="preguntaUsuario"
+                           placeholder="Escribe tu pregunta..."
+                           class="flex-1 bg-white/10 text-white placeholder-blue-300 border border-white/20 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400/50">
+                    <button type="submit" id="btnEnviar"
+                            class="bg-yellow-400 hover:bg-yellow-300 text-blue-900 w-10 h-10 rounded-xl flex items-center justify-center transition flex-shrink-0 font-bold">
+                        <i class="fas fa-paper-plane text-sm"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Panel de info técnico -->
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <i class="fas fa-info-circle text-blue-600"></i> Información adicional
+            </h3>
+            {% if ticket.tecnico %}
+            <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-3">
+                <div class="text-xs text-green-700 font-semibold mb-1">TÉCNICO ASIGNADO</div>
+                <div class="font-bold text-gray-800">{{ ticket.tecnico.nombre }}</div>
+                <div class="text-gray-500 text-xs">{{ ticket.tecnico.area or ticket.tecnico.email }}</div>
+            </div>
+            {% endif %}
+            <div class="text-sm text-gray-600 space-y-2">
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">ID Ticket</span>
+                    <span class="font-mono font-bold">#{{ ticket.id }}</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">Estado actual</span>
+                    <span class="font-semibold">{{ ticket.estado }}</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">Prioridad</span>
+                    <span class="font-semibold">{{ ticket.prioridad }}</span>
+                </div>
+                <div class="flex justify-between py-2">
+                    <span class="text-gray-500">Mensajes IA</span>
+                    <span class="font-semibold">{{ mensajes_ia|length }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{% if current_user.rol == 'usuario' and ticket.usuario_id == current_user.id %}
+<script>
+const TICKET_ID = {{ ticket.id }};
+const HAYHISTORIAL = {{ 'true' if mensajes_ia else 'false' }};
+const DESCRIPCION = {{ ticket.descripcion | tojson }};
+
+const chatDiv = document.getElementById('chatConversacion');
+const typingInd = document.getElementById('typingIndicator');
+
+function scrollBottom() { chatDiv.scrollTop = chatDiv.scrollHeight; }
+
+function safeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function appendMsg(text, isUser) {
+    if (isUser) {
+        chatDiv.insertAdjacentHTML('beforeend', `
+            <div class="flex justify-end fade-in">
+                <div class="ia-bubble-user px-4 py-3 text-sm max-w-xs">${safeHtml(text)}</div>
+            </div>`);
+    } else {
+        chatDiv.insertAdjacentHTML('beforeend', `
+            <div class="fade-in">
+                <div class="flex items-start gap-2">
+                    <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="fas fa-robot text-blue-900 text-xs"></i>
+                    </div>
+                    <div class="ia-bubble-bot px-4 py-3 text-sm max-w-xs text-gray-700 whitespace-pre-line">${safeHtml(text)}</div>
+                </div>
+            </div>`);
+    }
+    scrollBottom();
+}
+
+async function enviarPregunta(pregunta) {
+    appendMsg(pregunta, true);
+    typingInd.classList.remove('hidden');
+    scrollBottom();
+
+    try {
+        const res = await fetch('/api/chat-ia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pregunta, ticket_id: TICKET_ID })
+        });
+        const data = await res.json();
+        typingInd.classList.add('hidden');
+        appendMsg(data.respuesta, false);
+    } catch {
+        typingInd.classList.add('hidden');
+        appendMsg('Error al conectar. Por favor intenta nuevamente.', false);
+    }
+}
+
+// Auto-enviar descripción si no hay historial
+if (!HAYHISTORIAL) {
+    setTimeout(() => {
+        enviarPregunta(DESCRIPCION);
+    }, 800);
+}
+
+scrollBottom();
+
+// Form submit
+document.getElementById('chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('preguntaUsuario');
+    const btn = document.getElementById('btnEnviar');
+    const texto = input.value.trim();
+    if (!texto) return;
+    input.value = '';
+    btn.disabled = true;
+    await enviarPregunta(texto);
+    btn.disabled = false;
+    input.focus();
+});
+</script>
+{% endif %}
+{% endblock %}

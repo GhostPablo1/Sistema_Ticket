@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}Nuevo Ticket - Sistema de Ticket Municipalidad de Bellavista{% endblock %}
+
+{% block content %}
+
+<div class="mb-5">
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
+        <a href="{{ url_for('dashboard_usuario') }}" class="hover:text-blue-700">Mis Tickets</a>
+        <i class="fas fa-chevron-right text-xs"></i>
+        <span class="text-gray-800 font-medium">Nuevo Ticket</span>
+    </div>
+    <h1 class="text-2xl font-bold text-gray-800">Crear Nueva Solicitud</h1>
+    <p class="text-gray-500 text-sm">Describe tu problema. El Asistente IA te dará soluciones inmediatas.</p>
+</div>
+
+<div class="grid lg:grid-cols-5 gap-6">
+
+    <!-- ===== FORMULARIO (3/5) ===== -->
+    <div class="lg:col-span-3">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-900 to-blue-800 px-6 py-4">
+                <h2 class="text-white font-bold text-lg flex items-center gap-2">
+                    <i class="fas fa-ticket-alt text-yellow-300"></i> Datos del Ticket
+                </h2>
+            </div>
+            <div class="p-6">
+                <form method="POST" id="ticketForm" class="space-y-5">
+                    <!-- Título -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Título del problema <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" name="titulo" id="titulo" required
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                               placeholder="Ej: Impresora no imprime en color">
+                    </div>
+
+                    <!-- Categoría + Prioridad -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Categoría</label>
+                            <select name="categoria" id="categoria"
+                                    class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                                <option value="impresora">🖨️ Impresora</option>
+                                <option value="computadora">🖥️ Computadora</option>
+                                <option value="internet">🌐 Internet / Red</option>
+                                <option value="software">💻 Software</option>
+                                <option value="otro">🔧 Otro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Prioridad</label>
+                            <select name="prioridad" id="prioridad"
+                                    class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                                <option value="Baja">🟢 Baja</option>
+                                <option value="Media" selected>🟡 Media</option>
+                                <option value="Alta">🔴 Alta</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Descripción detallada <span class="text-red-500">*</span>
+                        </label>
+                        <textarea name="descripcion" id="descripcion" rows="5" required
+                                  class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                                  placeholder="Describe el problema con el mayor detalle posible: ¿Qué ocurre? ¿Cuándo empezó? ¿Qué mensaje de error aparece?"></textarea>
+                        <div id="charHint" class="mt-1 text-xs text-gray-400 hidden">
+                            <i class="fas fa-lightbulb text-yellow-500"></i>
+                            <span id="iaHintText">El Asistente IA analizará tu descripción automáticamente...</span>
+                        </div>
+                    </div>
+
+                    <!-- Botón consultar IA (visible cuando hay texto) -->
+                    <div id="btnIaWrap" class="hidden">
+                        <button type="button" id="btnConsultarIA"
+                                class="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 border-2 border-dashed border-indigo-300 text-indigo-700 font-semibold py-3 rounded-xl transition">
+                            <i class="fas fa-robot text-lg"></i>
+                            Ver soluciones rápidas del Asistente IA
+                        </button>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-3 pt-2">
+                        <button type="submit"
+                                class="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-md">
+                            <i class="fas fa-paper-plane"></i> Enviar Ticket al Soporte
+                        </button>
+                        <a href="{{ url_for('dashboard_usuario') }}"
+                           class="px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition flex items-center gap-2">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PANEL IA (2/5) ===== -->
+    <div class="lg:col-span-2">
+        <div class="bg-gradient-to-b from-blue-900 to-indigo-900 rounded-2xl shadow-lg overflow-hidden flex flex-col" style="min-height: 520px;">
+            <!-- Header IA -->
+            <div class="px-5 py-4 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-robot text-blue-900 text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-white font-bold">Asistente IA</div>
+                        <div class="text-blue-300 text-xs flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>
+                            Disponible ahora
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat area -->
+            <div id="iaChat" class="flex-1 p-4 overflow-y-auto scrollbar-thin space-y-3" style="max-height: 380px;">
+                <!-- Mensaje de bienvenida -->
+                <div class="fade-in">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fas fa-robot text-blue-900 text-xs"></i>
+                        </div>
+                        <div class="ia-bubble-bot px-4 py-3 text-sm max-w-xs text-gray-700">
+                            ¡Hola! Soy el asistente virtual de soporte técnico. 👋<br><br>
+                            <strong>Escribe tu problema en el formulario</strong> y te daré soluciones inmediatas. Si el problema persiste, el ticket será enviado al equipo de soporte.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Indicador de "analizando" (oculto por defecto) -->
+                <div id="iaTyping" class="hidden">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-robot text-blue-900 text-xs"></i>
+                        </div>
+                        <div class="ia-bubble-bot px-4 py-3 text-sm text-gray-500 flex items-center gap-2">
+                            <i class="fas fa-circle-notch fa-spin text-blue-500"></i> Analizando tu problema...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input manual para el chat IA -->
+            <div class="p-4 border-t border-white/10 bg-white/5">
+                <div class="flex gap-2">
+                    <input type="text" id="iaChatInput" placeholder="Pregunta directamente a la IA..."
+                           class="flex-1 bg-white/10 text-white placeholder-blue-300 border border-white/20 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400/50">
+                    <button id="iaChatSend"
+                            class="bg-yellow-400 hover:bg-yellow-300 text-blue-900 w-10 h-10 rounded-xl flex items-center justify-center transition flex-shrink-0 font-bold">
+                        <i class="fas fa-paper-plane text-sm"></i>
+                    </button>
+                </div>
+                <p class="text-blue-400 text-xs mt-2 text-center">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Las consultas de IA no crean ticket
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const iaChat = document.getElementById('iaChat');
+const iaTyping = document.getElementById('iaTyping');
+const charHint = document.getElementById('charHint');
+const btnIaWrap = document.getElementById('btnIaWrap');
+
+let debounceTimer = null;
+let lastDescSent = '';
+
+function scrollIa() { iaChat.scrollTop = iaChat.scrollHeight; }
+
+function safeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function appendUserBubble(text) {
+    iaChat.insertAdjacentHTML('beforeend', `
+        <div class="flex justify-end fade-in">
+            <div class="ia-bubble-user px-4 py-3 text-sm max-w-xs">${safeHtml(text)}</div>
+        </div>`);
+    scrollIa();
+}
+
+function appendBotBubble(text) {
+    iaChat.insertAdjacentHTML('beforeend', `
+        <div class="fade-in">
+            <div class="flex items-start gap-2">
+                <div class="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <i class="fas fa-robot text-blue-900 text-xs"></i>
+                </div>
+                <div class="ia-bubble-bot px-4 py-3 text-sm max-w-xs text-gray-700 whitespace-pre-line">${safeHtml(text)}</div>
+            </div>
+        </div>`);
+    scrollIa();
+}
+
+async function consultarIA(texto) {
+    if (!texto || texto === lastDescSent) return;
+    lastDescSent = texto;
+
+    appendUserBubble(texto);
+    iaTyping.classList.remove('hidden');
+    scrollIa();
+
+    try {
+        const res = await fetch('/api/chat-ia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pregunta: texto })
+        });
+        const data = await res.json();
+        iaTyping.classList.add('hidden');
+        appendBotBubble(data.respuesta);
+    } catch {
+        iaTyping.classList.add('hidden');
+        appendBotBubble('No pude conectarme al asistente. Por favor, envía el ticket al soporte técnico.');
+    }
+}
+
+// Detectar escritura en la descripción
+const descInput = document.getElementById('descripcion');
+descInput.addEventListener('input', function() {
+    const val = this.value.trim();
+    clearTimeout(debounceTimer);
+
+    if (val.length >= 30) {
+        charHint.classList.remove('hidden');
+        btnIaWrap.classList.remove('hidden');
+        // Auto-análisis con debounce de 2s
+        debounceTimer = setTimeout(() => {
+            if (val !== lastDescSent) {
+                consultarIA(val);
+            }
+        }, 2000);
+    } else {
+        charHint.classList.add('hidden');
+        if (val.length === 0) btnIaWrap.classList.add('hidden');
+    }
+});
+
+// Botón "Ver soluciones rápidas"
+document.getElementById('btnConsultarIA').addEventListener('click', function() {
+    const desc = descInput.value.trim();
+    if (desc) {
+        clearTimeout(debounceTimer);
+        consultarIA(desc);
+    }
+});
+
+// Chat manual con input
+const iaChatInput = document.getElementById('iaChatInput');
+document.getElementById('iaChatSend').addEventListener('click', enviarManual);
+iaChatInput.addEventListener('keydown', e => { if (e.key === 'Enter') enviarManual(); });
+
+async function enviarManual() {
+    const texto = iaChatInput.value.trim();
+    if (!texto) return;
+    iaChatInput.value = '';
+    appendUserBubble(texto);
+    iaTyping.classList.remove('hidden');
+    scrollIa();
+
+    try {
+        const res = await fetch('/api/chat-ia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pregunta: texto })
+        });
+        const data = await res.json();
+        iaTyping.classList.add('hidden');
+        appendBotBubble(data.respuesta);
+    } catch {
+        iaTyping.classList.add('hidden');
+        appendBotBubble('Error de conexión. Intenta nuevamente.');
+    }
+}
+</script>
+{% endblock %}

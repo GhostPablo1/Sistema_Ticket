@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Cuenta - Sistema de Ticket Municipalidad de Bellavista</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+        .fade-up { animation: fadeUp .4s ease forwards; }
+        .input-field {
+            width: 100%; padding: .65rem 1rem .65rem 2.8rem;
+            border: 1.5px solid #e5e7eb; border-radius: .6rem;
+            font-size: .95rem; transition: border-color .2s, box-shadow .2s;
+            background: #f9fafb;
+        }
+        .input-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); background: white; }
+        .input-plain {
+            width: 100%; padding: .65rem 1rem;
+            border: 1.5px solid #e5e7eb; border-radius: .6rem;
+            font-size: .95rem; transition: border-color .2s;
+            background: #f9fafb;
+        }
+        .input-plain:focus { outline: none; border-color: #2563eb; background: white; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center py-8 px-4"
+      style="background: linear-gradient(135deg, #0f2744 0%, #1a3a6e 50%, #1e4d8c 100%);">
+
+    <div class="w-full max-w-lg fade-up">
+        <!-- Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <!-- Header -->
+            <div class="text-center mb-7">
+                <div class="w-16 h-16 bg-blue-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                    <i class="fas fa-user-plus text-yellow-400 text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">Crear Cuenta</h2>
+                <p class="text-gray-500 text-sm mt-1">Sistema de Ticket — Municipalidad de Bellavista</p>
+            </div>
+
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-3 rounded-xl text-sm flex items-center gap-2
+                            {% if category == 'danger' %}bg-red-50 border border-red-200 text-red-700
+                            {% elif category == 'success' %}bg-green-50 border border-green-200 text-green-700
+                            {% else %}bg-blue-50 border border-blue-200 text-blue-700{% endif %}">
+                            <i class="fas {% if category == 'danger' %}fa-times-circle{% else %}fa-check-circle{% endif %}"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="space-y-4">
+                <!-- Nombre -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Nombre Completo *</label>
+                    <div class="relative">
+                        <i class="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="text" name="nombre" class="input-field" placeholder="Ej: Juan Pérez López" required>
+                    </div>
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Correo Electrónico *</label>
+                    <div class="relative">
+                        <i class="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="email" name="email" class="input-field" placeholder="tu@bellavista.gob.pe" required>
+                    </div>
+                </div>
+
+                <!-- Área -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Área / Departamento</label>
+                    <select name="area" class="input-plain">
+                        <option value="">— Seleccionar área —</option>
+                        <option value="Administración">Administración</option>
+                        <option value="Contabilidad">Contabilidad</option>
+                        <option value="Logística">Logística</option>
+                        <option value="Recursos Humanos">Recursos Humanos</option>
+                        <option value="Tesorería">Tesorería</option>
+                        <option value="Gerencia">Gerencia</option>
+                        <option value="Secretaría General">Secretaría General</option>
+                        <option value="Informática">Informática</option>
+                        <option value="Atención al Ciudadano">Atención al Ciudadano</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+
+                <!-- Contraseñas en dos columnas -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Contraseña *</label>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                            <input type="password" name="password" id="pass1" class="input-field"
+                                   placeholder="Mín. 6 caracteres" required minlength="6">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Confirmar *</label>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                            <input type="password" name="confirm_password" id="pass2" class="input-field"
+                                   placeholder="Repite la contraseña" required minlength="6">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Match indicator -->
+                <div id="passMatch" class="text-xs hidden"></div>
+
+                <button type="submit"
+                        class="w-full bg-blue-900 hover:bg-blue-800 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg mt-2">
+                    <i class="fas fa-user-plus"></i>
+                    Crear Cuenta
+                </button>
+            </form>
+
+            <div class="mt-5 text-center">
+                <p class="text-gray-500 text-sm">
+                    ¿Ya tienes cuenta?
+                    <a href="{{ url_for('login') }}" class="text-blue-700 font-semibold hover:underline">
+                        Inicia sesión aquí
+                    </a>
+                </p>
+            </div>
+        </div>
+
+        <p class="text-center text-blue-300 text-xs mt-4">
+            Municipalidad Distrital de Bellavista &mdash; Prácticas Preprofesionales 2026
+        </p>
+    </div>
+
+    <script>
+        const p1 = document.getElementById('pass1');
+        const p2 = document.getElementById('pass2');
+        const msg = document.getElementById('passMatch');
+
+        function checkMatch() {
+            if (!p2.value) { msg.classList.add('hidden'); return; }
+            msg.classList.remove('hidden');
+            if (p1.value === p2.value) {
+                msg.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i><span class="text-green-600">Las contraseñas coinciden</span>';
+            } else {
+                msg.innerHTML = '<i class="fas fa-times-circle text-red-500 mr-1"></i><span class="text-red-600">Las contraseñas no coinciden</span>';
+            }
+        }
+        p1.addEventListener('input', checkMatch);
+        p2.addEventListener('input', checkMatch);
+    </script>
+</body>
+</html>
