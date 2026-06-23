@@ -190,6 +190,19 @@ def _ticket_json(ticket):
     }
 
 
+def _usuario_json(usuario):
+    return {
+        'id': usuario.id,
+        'nombre': usuario.nombre,
+        'inicial': usuario.nombre[:1].upper(),
+        'email': usuario.email,
+        'rol': usuario.rol,
+        'area': usuario.area or '',
+        'fecha_registro': usuario.fecha_registro.strftime('%d/%m/%Y') if usuario.fecha_registro else '',
+        'delete_url': url_for('admin_eliminar_usuario', user_id=usuario.id),
+    }
+
+
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -253,15 +266,14 @@ def register():
         db.session.add(nuevo)
         db.session.commit()
 
+        session['pending_email'] = email
         try:
             _send_verification_email(nuevo)
         except Exception as e:
             print(f"❌ Error enviando correo: {e}", file=sys.stderr)
             flash('Cuenta creada, pero no pudimos enviar el correo de verificación. '
-                  'Contacta al administrador.', 'warning')
-            return redirect(url_for('login'))
+                  'Usa reenviar cuando el correo este configurado.', 'warning')
 
-        session['pending_email'] = email
         return redirect(url_for('verificar_pendiente'))
 
     return render_template('register.html')
@@ -583,6 +595,26 @@ def admin_usuarios():
         return redirect(url_for('dashboard_usuario'))
     usuarios = Usuario.query.order_by(Usuario.fecha_registro.desc()).all()
     return render_template('admin_usuarios.html', usuarios=usuarios)
+
+
+@app.route('/api/admin/usuarios')
+@login_required
+def api_admin_usuarios():
+    if current_user.rol != 'tecnico':
+        return jsonify({'error': 'No autorizado'}), 403
+
+    usuarios = Usuario.query.order_by(Usuario.fecha_registro.desc()).all()
+    usuarios_rol = sum(1 for u in usuarios if u.rol == 'usuario')
+    tecnicos_rol = sum(1 for u in usuarios if u.rol == 'tecnico')
+
+    return jsonify({
+        'usuarios': [_usuario_json(usuario) for usuario in usuarios],
+        'stats': {
+            'total': len(usuarios),
+            'usuarios': usuarios_rol,
+            'tecnicos': tecnicos_rol,
+        }
+    })
 
 
 @app.route('/admin/usuario/crear', methods=['POST'])
