@@ -155,6 +155,12 @@ def _mail_sender():
 
 
 def _send_email(subject, recipient, html):
+    if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+        msg = Message(subject, sender=_mail_sender(), recipients=[recipient])
+        msg.html = html
+        mail.send(msg)
+        return
+
     if app.config['RESEND_API_KEY']:
         payload = json.dumps({
             'from': app.config['RESEND_FROM'],
@@ -183,9 +189,7 @@ def _send_email(subject, recipient, html):
             raise RuntimeError(f'Resend connection error: {e.reason}') from e
         return
 
-    msg = Message(subject, sender=_mail_sender(), recipients=[recipient])
-    msg.html = html
-    mail.send(msg)
+    raise RuntimeError('No hay configuracion de correo disponible')
 
 
 def _send_verification_email(usuario):
