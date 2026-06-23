@@ -27,7 +27,7 @@
                         <div class="text-blue-300 text-xs mb-1">Ticket #{{ ticket.id }}</div>
                         <h1 class="text-white font-bold text-xl leading-tight">{{ ticket.titulo }}</h1>
                     </div>
-                    <span class="badge flex-shrink-0 mt-1
+                    <span id="ticketEstadoBadge" class="badge flex-shrink-0 mt-1
                         {% if ticket.estado == 'Pendiente' %}badge-pendiente
                         {% elif ticket.estado == 'En Proceso' %}badge-proceso
                         {% elif ticket.estado == 'Resuelto' %}badge-resuelto
@@ -47,6 +47,7 @@
                     </div>
                     <div class="bg-gray-50 rounded-xl p-3">
                         <div class="text-xs text-gray-400 font-medium mb-1">Técnico</div>
+                        <div id="ticketTecnicoInfo">
                         {% if ticket.tecnico %}
                         <div class="font-semibold text-gray-800 text-sm">{{ ticket.tecnico.nombre }}</div>
                         <div class="text-green-600 text-xs">Asignado</div>
@@ -54,6 +55,7 @@
                         <div class="font-semibold text-gray-500 text-sm">Sin asignar</div>
                         <div class="text-yellow-600 text-xs">Pendiente</div>
                         {% endif %}
+                        </div>
                     </div>
                     <div class="bg-gray-50 rounded-xl p-3">
                         <div class="text-xs text-gray-400 font-medium mb-1">Categoría</div>
@@ -83,9 +85,9 @@
                     <div class="bg-gray-50 rounded-xl p-3">
                         <div class="text-xs text-gray-400 font-medium mb-1">Resuelto</div>
                         {% if ticket.fecha_resolucion %}
-                        <div class="font-semibold text-green-700 text-sm">{{ ticket.fecha_resolucion.strftime('%d/%m/%Y') }}</div>
+                        <div id="ticketFechaResolucion" class="font-semibold text-green-700 text-sm">{{ ticket.fecha_resolucion.strftime('%d/%m/%Y') }}</div>
                         {% else %}
-                        <div class="font-semibold text-gray-400 text-sm">—</div>
+                        <div id="ticketFechaResolucion" class="font-semibold text-gray-400 text-sm">—</div>
                         {% endif %}
                     </div>
                 </div>
@@ -102,7 +104,7 @@
 
         <!-- Acciones para técnico -->
         {% if current_user.rol == 'tecnico' %}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div id="userCloseTicketAction" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
             <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <i class="fas fa-tools text-blue-600"></i> Gestión del Ticket
             </h3>
@@ -254,7 +256,7 @@
                 </div>
                 <div class="flex justify-between py-2 border-b border-gray-100">
                     <span class="text-gray-500">Estado actual</span>
-                    <span class="font-semibold">{{ ticket.estado }}</span>
+                    <span id="ticketEstadoTexto" class="font-semibold">{{ ticket.estado }}</span>
                 </div>
                 <div class="flex justify-between py-2 border-b border-gray-100">
                     <span class="text-gray-500">Prioridad</span>
@@ -353,4 +355,111 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
 });
 </script>
 {% endif %}
+<script>
+const LIVE_TICKET_ID = {{ ticket.id }};
+let ticketResumenSnapshot = '';
+
+function liveSafeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function liveEstadoBadge(estado) {
+    if (estado === 'Pendiente') return 'badge-pendiente';
+    if (estado === 'En Proceso') return 'badge-proceso';
+    if (estado === 'Resuelto') return 'badge-resuelto';
+    return 'badge-cerrado';
+}
+
+function setTicketBadge(estado) {
+    const badge = document.getElementById('ticketEstadoBadge');
+    if (!badge) return;
+    badge.className = `badge flex-shrink-0 mt-1 ${liveEstadoBadge(estado)}`;
+    badge.textContent = estado;
+}
+
+function setTicketTecnico(ticket) {
+    const tecnicoInfo = document.getElementById('ticketTecnicoInfo');
+    if (!tecnicoInfo) return;
+
+    if (ticket.tecnico_nombre) {
+        tecnicoInfo.innerHTML = `
+            <div class="font-semibold text-gray-800 text-sm">${liveSafeHtml(ticket.tecnico_nombre)}</div>
+            <div class="text-green-600 text-xs">Asignado</div>`;
+    } else {
+        tecnicoInfo.innerHTML = `
+            <div class="font-semibold text-gray-500 text-sm">Sin asignar</div>
+            <div class="text-yellow-600 text-xs">Pendiente</div>`;
+    }
+}
+
+function setTicketFechaResolucion(ticket) {
+    const fecha = document.getElementById('ticketFechaResolucion');
+    if (!fecha) return;
+
+    if (ticket.fecha_resolucion) {
+        fecha.className = 'font-semibold text-green-700 text-sm';
+        fecha.textContent = ticket.fecha_resolucion;
+    } else {
+        fecha.className = 'font-semibold text-gray-400 text-sm';
+        fecha.textContent = '---';
+    }
+}
+
+function setTicketActions(estado) {
+    const userCloseAction = document.getElementById('userCloseTicketAction');
+    if (userCloseAction) {
+        userCloseAction.classList.toggle('hidden', estado === 'Cerrado' || estado === 'Resuelto');
+    }
+
+    const estadoSelect = document.querySelector('select[name="estado"]');
+    if (estadoSelect && estadoSelect.value !== estado) {
+        estadoSelect.value = estado;
+    }
+}
+
+function renderTicketResumen(ticket) {
+    setTicketBadge(ticket.estado);
+    setTicketTecnico(ticket);
+    setTicketFechaResolucion(ticket);
+    setTicketActions(ticket.estado);
+
+    const estadoTexto = document.getElementById('ticketEstadoTexto');
+    if (estadoTexto) estadoTexto.textContent = ticket.estado;
+}
+
+async function actualizarResumenTicket() {
+    if (document.hidden) return;
+
+    try {
+        const res = await fetch('{{ url_for("api_ticket_resumen", ticket_id=ticket.id) }}', {
+            headers: { 'X-Requested-With': 'fetch' }
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const snapshot = JSON.stringify(data);
+        if (snapshot === ticketResumenSnapshot) return;
+
+        ticketResumenSnapshot = snapshot;
+        renderTicketResumen(data.ticket);
+    } catch {
+        // Si falla la conexion, se conserva el estado visible actual.
+    }
+}
+
+ticketResumenSnapshot = JSON.stringify({
+    estado: {{ ticket.estado | tojson }},
+    tecnico: {{ (ticket.tecnico.nombre if ticket.tecnico else '') | tojson }},
+    fecha_resolucion: {{ (ticket.fecha_resolucion.strftime('%d/%m/%Y') if ticket.fecha_resolucion else '') | tojson }}
+});
+
+actualizarResumenTicket();
+setInterval(actualizarResumenTicket, 5000);
+document.addEventListener('visibilitychange', actualizarResumenTicket);
+</script>
 {% endblock %}

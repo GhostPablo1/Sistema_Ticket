@@ -28,7 +28,7 @@
                 <i class="fas fa-ticket-alt text-blue-600"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-gray-800">{{ tickets|length }}</div>
+        <div id="user-stat-total" class="text-3xl font-bold text-gray-800">{{ tickets|length }}</div>
         <div class="text-gray-500 text-xs mt-1">tickets creados</div>
     </div>
 
@@ -39,7 +39,7 @@
                 <i class="fas fa-clock text-yellow-600"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-yellow-600">{{ pendientes }}</div>
+        <div id="user-stat-pendientes" class="text-3xl font-bold text-yellow-600">{{ pendientes }}</div>
         <div class="text-gray-500 text-xs mt-1">en espera</div>
     </div>
 
@@ -50,7 +50,7 @@
                 <i class="fas fa-cog text-blue-600"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-blue-600">{{ en_proceso }}</div>
+        <div id="user-stat-en-proceso" class="text-3xl font-bold text-blue-600">{{ en_proceso }}</div>
         <div class="text-gray-500 text-xs mt-1">siendo atendidos</div>
     </div>
 
@@ -61,7 +61,7 @@
                 <i class="fas fa-check-circle text-green-600"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-green-600">{{ resueltos }}</div>
+        <div id="user-stat-resueltos" class="text-3xl font-bold text-green-600">{{ resueltos }}</div>
         <div class="text-gray-500 text-xs mt-1">solucionados</div>
     </div>
 </div>
@@ -89,11 +89,10 @@
         <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
             <i class="fas fa-list text-blue-600"></i> Mis Solicitudes
         </h2>
-        <span class="text-sm text-gray-500">{{ tickets|length }} ticket(s)</span>
+        <span id="user-ticket-count" class="text-sm text-gray-500">{{ tickets|length }} ticket(s)</span>
     </div>
 
-    {% if tickets %}
-    <div class="overflow-x-auto">
+    <div id="userTicketsTableWrap" class="overflow-x-auto {% if not tickets %}hidden{% endif %}">
         <table class="w-full">
             <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -106,7 +105,7 @@
                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Acción</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-50">
+            <tbody id="userTicketsBody" class="divide-y divide-gray-50">
                 {% for t in tickets %}
                 <tr class="hover:bg-gray-50 transition">
                     <td class="px-4 py-3 text-sm text-gray-500 font-mono">#{{ t.id }}</td>
@@ -155,8 +154,7 @@
             </tbody>
         </table>
     </div>
-    {% else %}
-    <div class="py-16 text-center">
+    <div id="userTicketsEmpty" class="py-16 text-center {% if tickets %}hidden{% endif %}">
         <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-ticket-alt text-gray-400 text-2xl"></i>
         </div>
@@ -167,7 +165,143 @@
             <i class="fas fa-plus"></i> Crear mi primer ticket
         </a>
     </div>
-    {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let userTicketsSnapshot = '';
+
+function safeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function shortText(value, maxLength) {
+    const text = String(value ?? '');
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function categoriaIcon(categoria) {
+    const iconos = {
+        impresora: 'fa-print',
+        internet: 'fa-wifi',
+        computadora: 'fa-desktop',
+        software: 'fa-code',
+    };
+    return iconos[categoria] || 'fa-tools';
+}
+
+function categoriaTexto(categoria) {
+    if (!categoria) return '---';
+    return categoria.charAt(0).toUpperCase() + categoria.slice(1);
+}
+
+function estadoBadge(estado) {
+    if (estado === 'Pendiente') return 'badge-pendiente';
+    if (estado === 'En Proceso') return 'badge-proceso';
+    if (estado === 'Resuelto') return 'badge-resuelto';
+    return 'badge-cerrado';
+}
+
+function prioridadBadge(prioridad) {
+    if (prioridad === 'Alta') return 'badge-alta';
+    if (prioridad === 'Media') return 'badge-media';
+    return 'badge-baja';
+}
+
+function renderUserTicketRow(ticket) {
+    return `
+        <tr class="hover:bg-gray-50 transition">
+            <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(ticket.id)}</td>
+            <td class="px-4 py-3">
+                <div class="font-medium text-gray-800 text-sm">${safeHtml(ticket.titulo)}</div>
+                <div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(ticket.descripcion, 60))}</div>
+            </td>
+            <td class="px-4 py-3 hidden md:table-cell">
+                <span class="text-sm text-gray-600">
+                    <i class="fas ${categoriaIcon(ticket.categoria)} text-gray-400 mr-1"></i>
+                    ${safeHtml(categoriaTexto(ticket.categoria))}
+                </span>
+            </td>
+            <td class="px-4 py-3">
+                <span class="badge ${estadoBadge(ticket.estado)}">${safeHtml(ticket.estado)}</span>
+            </td>
+            <td class="px-4 py-3 hidden sm:table-cell">
+                <span class="badge ${prioridadBadge(ticket.prioridad)}">${safeHtml(ticket.prioridad)}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">
+                ${safeHtml(ticket.fecha)}
+            </td>
+            <td class="px-4 py-3 text-center">
+                <a href="${safeHtml(ticket.url)}"
+                   class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium text-sm hover:underline">
+                    <i class="fas fa-eye"></i><span class="hidden sm:inline">Ver</span>
+                </a>
+            </td>
+        </tr>`;
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function actualizarContadoresUsuario(stats) {
+    setText('user-stat-total', stats.total);
+    setText('user-stat-pendientes', stats.pendientes);
+    setText('user-stat-en-proceso', stats.en_proceso);
+    setText('user-stat-resueltos', stats.resueltos);
+    setText('user-ticket-count', `${stats.total} ticket(s)`);
+}
+
+function renderUserTickets(tickets) {
+    const body = document.getElementById('userTicketsBody');
+    const tableWrap = document.getElementById('userTicketsTableWrap');
+    const empty = document.getElementById('userTicketsEmpty');
+
+    if (!body || !tableWrap || !empty) return;
+
+    body.innerHTML = tickets.map(renderUserTicketRow).join('');
+    tableWrap.classList.toggle('hidden', tickets.length === 0);
+    empty.classList.toggle('hidden', tickets.length > 0);
+}
+
+async function actualizarTicketsUsuario() {
+    if (document.hidden) return;
+
+    try {
+        const res = await fetch('{{ url_for("api_usuario_tickets") }}', {
+            headers: { 'X-Requested-With': 'fetch' }
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const snapshot = JSON.stringify(data);
+        if (snapshot === userTicketsSnapshot) return;
+
+        userTicketsSnapshot = snapshot;
+        actualizarContadoresUsuario(data.stats);
+        renderUserTickets(data.tickets);
+    } catch {
+        // Si falla la conexion, se mantiene la ultima informacion visible.
+    }
+}
+
+userTicketsSnapshot = JSON.stringify({
+    total: {{ tickets|length }},
+    pendientes: {{ pendientes }},
+    en_proceso: {{ en_proceso }},
+    resueltos: {{ resueltos }}
+});
+
+actualizarTicketsUsuario();
+setInterval(actualizarTicketsUsuario, 5000);
+document.addEventListener('visibilitychange', actualizarTicketsUsuario);
+</script>
 {% endblock %}

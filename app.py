@@ -54,15 +54,23 @@ print(f"📁 URI final: {db_uri}", file=sys.stderr)
 
 db.init_app(app)
 
+
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
 # ============================================================
 # CONFIGURACIÓN DE CORREO
 # ============================================================
 app.config['MAIL_SERVER']         = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']           = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS']        = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USE_TLS']        = _env_bool('MAIL_USE_TLS', True)
+app.config['MAIL_USE_SSL']        = _env_bool('MAIL_USE_SSL', False)
 app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD', '').replace(' ', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME']
 
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -156,6 +164,32 @@ def _send_reset_email(usuario):
 
 
 # ==================== RUTAS PÚBLICAS ====================
+def _ticket_json(ticket):
+    creador = ticket.creador
+    tecnico = ticket.tecnico
+    creador_nombre = creador.nombre if creador else ''
+    tecnico_nombre = tecnico.nombre if tecnico else ''
+
+    return {
+        'id': ticket.id,
+        'titulo': ticket.titulo,
+        'descripcion': ticket.descripcion or '',
+        'categoria': ticket.categoria or '',
+        'estado': ticket.estado,
+        'prioridad': ticket.prioridad,
+        'fecha': ticket.fecha_creacion.strftime('%d/%m/%Y') if ticket.fecha_creacion else '',
+        'hora': ticket.fecha_creacion.strftime('%H:%M') if ticket.fecha_creacion else '',
+        'fecha_resolucion': ticket.fecha_resolucion.strftime('%d/%m/%Y') if ticket.fecha_resolucion else '',
+        'creador_nombre': creador_nombre,
+        'creador_inicial': creador_nombre[:1].upper(),
+        'creador_area': creador.area if creador else '',
+        'tecnico_nombre': tecnico_nombre,
+        'tecnico_area': tecnico.area if tecnico else '',
+        'tecnico_email': tecnico.email if tecnico else '',
+        'url': url_for('ver_ticket', ticket_id=ticket.id),
+    }
+
+
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -353,6 +387,28 @@ def dashboard_usuario():
                            pendientes=pendientes, en_proceso=en_proceso, resueltos=resueltos)
 
 
+@app.route('/api/usuario/tickets')
+@login_required
+def api_usuario_tickets():
+    if current_user.rol != 'usuario':
+        return jsonify({'error': 'No autorizado'}), 403
+
+    tickets = Ticket.query.filter_by(usuario_id=current_user.id).order_by(Ticket.fecha_creacion.desc()).all()
+    pendientes = sum(1 for t in tickets if t.estado == 'Pendiente')
+    en_proceso = sum(1 for t in tickets if t.estado == 'En Proceso')
+    resueltos = sum(1 for t in tickets if t.estado in ['Resuelto', 'Cerrado'])
+
+    return jsonify({
+        'tickets': [_ticket_json(ticket) for ticket in tickets],
+        'stats': {
+            'total': len(tickets),
+            'pendientes': pendientes,
+            'en_proceso': en_proceso,
+            'resueltos': resueltos,
+        }
+    })
+
+
 @app.route('/ticket/nuevo', methods=['GET', 'POST'])
 @login_required
 def nuevo_ticket():
@@ -379,6 +435,19 @@ def ver_ticket(ticket_id):
         return redirect(url_for('dashboard_usuario'))
     mensajes_ia = MensajeIA.query.filter_by(ticket_id=ticket.id).order_by(MensajeIA.timestamp).all()
     return render_template('detalle_ticket.html', ticket=ticket, mensajes_ia=mensajes_ia)
+
+
+@app.route('/api/ticket/<int:ticket_id>/resumen')
+@login_required
+def api_ticket_resumen(ticket_id):
+    ticket = Ticket.query.get_or_404(ticket_id)
+    if current_user.rol != 'tecnico' and ticket.usuario_id != current_user.id:
+        return jsonify({'error': 'No autorizado'}), 403
+
+    return jsonify({
+        'ticket': _ticket_json(ticket),
+        'mensajes_ia': MensajeIA.query.filter_by(ticket_id=ticket.id).count(),
+    })
 
 
 @app.route('/api/chat-ia', methods=['POST'])
