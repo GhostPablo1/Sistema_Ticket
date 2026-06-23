@@ -6,3 +6,4 @@ itsdangerous
 openai
 python-dotenv
 werkzeug
+gunicorn
