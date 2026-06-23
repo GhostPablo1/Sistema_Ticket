@@ -145,10 +145,16 @@ with app.app_context():
 # ============================================================
 # HELPERS DE CORREO
 # ============================================================
+def _mail_sender():
+    return app.config['MAIL_USERNAME'] or app.config['MAIL_DEFAULT_SENDER']
+
+
 def _send_verification_email(usuario):
     token = serializer.dumps(usuario.email, salt=SALT_VERIFICACION)
     link  = url_for('verificar_email', token=token, _external=True)
-    msg   = Message('Confirma tu cuenta — TicketIA Bellavista', recipients=[usuario.email])
+    msg   = Message('Confirma tu cuenta — TicketIA Bellavista',
+                    sender=_mail_sender(),
+                    recipients=[usuario.email])
     msg.html = render_template('emails/verificar_cuenta.html',
                                nombre=usuario.nombre, link=link)
     mail.send(msg)
@@ -157,7 +163,9 @@ def _send_verification_email(usuario):
 def _send_reset_email(usuario):
     token = serializer.dumps(usuario.email, salt=SALT_RESET)
     link  = url_for('reset_password', token=token, _external=True)
-    msg   = Message('Recupera tu contraseña — TicketIA Bellavista', recipients=[usuario.email])
+    msg   = Message('Recupera tu contraseña — TicketIA Bellavista',
+                    sender=_mail_sender(),
+                    recipients=[usuario.email])
     msg.html = render_template('emails/reset_password.html',
                                nombre=usuario.nombre, link=link)
     mail.send(msg)
