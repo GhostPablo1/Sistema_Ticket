@@ -31,7 +31,7 @@
                 <i class="fas fa-ticket-alt text-blue-600 text-sm"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-gray-800">{{ todos_tickets|length }}</div>
+        <div id="stat-total" class="text-3xl font-bold text-gray-800">{{ todos_tickets|length }}</div>
         <div class="text-gray-400 text-xs mt-1">tickets</div>
     </div>
 
@@ -42,7 +42,7 @@
                 <i class="fas fa-exclamation-circle text-red-500 text-sm"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-red-600">{{ tickets_pendientes|length }}</div>
+        <div id="stat-pendientes" class="text-3xl font-bold text-red-600">{{ tickets_pendientes|length }}</div>
         <div class="text-gray-400 text-xs mt-1">por atender</div>
     </div>
 
@@ -53,7 +53,7 @@
                 <i class="fas fa-cog text-yellow-600 text-sm"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-yellow-600">{{ tickets_en_proceso|length }}</div>
+        <div id="stat-en-proceso" class="text-3xl font-bold text-yellow-600">{{ tickets_en_proceso|length }}</div>
         <div class="text-gray-400 text-xs mt-1">en atención</div>
     </div>
 
@@ -64,7 +64,7 @@
                 <i class="fas fa-check text-blue-600 text-sm"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-blue-600">{{ tickets_resueltos|length }}</div>
+        <div id="stat-resueltos" class="text-3xl font-bold text-blue-600">{{ tickets_resueltos|length }}</div>
         <div class="text-gray-400 text-xs mt-1">solucionados</div>
     </div>
 
@@ -75,7 +75,7 @@
                 <i class="fas fa-check-double text-green-600 text-sm"></i>
             </div>
         </div>
-        <div class="text-3xl font-bold text-green-600">{{ tickets_cerrados|length }}</div>
+        <div id="stat-cerrados" class="text-3xl font-bold text-green-600">{{ tickets_cerrados|length }}</div>
         <div class="text-gray-400 text-xs mt-1">finalizados</div>
     </div>
 
@@ -99,7 +99,7 @@
         </div>
         <div>
             <div class="font-semibold text-gray-800 text-sm">Ver Pendientes</div>
-            <div class="text-gray-400 text-xs">{{ tickets_pendientes|length }} sin atender</div>
+            <div id="quick-pendientes-count" class="text-gray-400 text-xs">{{ tickets_pendientes|length }} sin atender</div>
         </div>
     </a>
     <a href="{{ url_for('estadisticas') }}" class="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 hover:border-blue-300 hover:shadow-md transition">
@@ -141,25 +141,24 @@
         <div class="flex gap-2 flex-wrap">
             <button onclick="filtrarTabla('todos')" id="btn-todos"
                     class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-blue-800 text-white border-blue-800">
-                Todos ({{ todos_tickets|length }})
+                Todos (<span id="filter-total">{{ todos_tickets|length }}</span>)
             </button>
             <button onclick="filtrarTabla('Pendiente')" id="btn-pendiente"
                     class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-yellow-400">
-                Pendientes ({{ tickets_pendientes|length }})
+                Pendientes (<span id="filter-pendientes">{{ tickets_pendientes|length }}</span>)
             </button>
             <button onclick="filtrarTabla('En Proceso')" id="btn-proceso"
                     class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-blue-400">
-                En Proceso ({{ tickets_en_proceso|length }})
+                En Proceso (<span id="filter-en-proceso">{{ tickets_en_proceso|length }}</span>)
             </button>
             <button onclick="filtrarTabla('Resuelto')" id="btn-resuelto"
                     class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-green-400">
-                Resueltos ({{ tickets_resueltos|length }})
+                Resueltos (<span id="filter-resueltos">{{ tickets_resueltos|length }}</span>)
             </button>
         </div>
     </div>
 
-    {% if todos_tickets %}
-    <div class="overflow-x-auto">
+    <div id="ticketsTableWrap" class="overflow-x-auto {% if not todos_tickets %}hidden{% endif %}">
         <table class="w-full" id="tablaTickets">
             <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -173,7 +172,7 @@
                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acción</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-50">
+            <tbody id="ticketsBody" class="divide-y divide-gray-50">
                 {% for t in todos_tickets %}
                 <tr class="hover:bg-gray-50 transition ticket-row" data-estado="{{ t.estado }}">
                     <td class="px-4 py-3 text-sm text-gray-500 font-mono">#{{ t.id }}</td>
@@ -231,21 +230,23 @@
             </tbody>
         </table>
     </div>
-    {% else %}
-    <div class="py-16 text-center">
+    <div id="ticketsEmpty" class="py-16 text-center {% if todos_tickets %}hidden{% endif %}">
         <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-ticket-alt text-gray-400 text-2xl"></i>
         </div>
         <p class="text-gray-500">No hay tickets registrados en el sistema.</p>
     </div>
-    {% endif %}
 </div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+let filtroActual = 'todos';
+let ticketsSnapshot = '';
+
 function filtrarTabla(estado) {
+    filtroActual = estado;
     const rows = document.querySelectorAll('.ticket-row');
     rows.forEach(row => {
         if (estado === 'todos' || row.dataset.estado === estado) {
@@ -266,5 +267,152 @@ function filtrarTabla(estado) {
         activeBtn.classList.remove('bg-white', 'text-gray-700', 'border-gray-200');
     }
 }
+
+function safeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function shortText(value, maxLength) {
+    const text = String(value ?? '');
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function categoriaIcon(categoria) {
+    const iconos = {
+        impresora: 'fa-print',
+        internet: 'fa-wifi',
+        computadora: 'fa-desktop',
+        software: 'fa-code',
+    };
+    return iconos[categoria] || 'fa-tools';
+}
+
+function categoriaTexto(categoria) {
+    if (!categoria) return '---';
+    return categoria.charAt(0).toUpperCase() + categoria.slice(1);
+}
+
+function estadoBadge(estado) {
+    if (estado === 'Pendiente') return 'badge-pendiente';
+    if (estado === 'En Proceso') return 'badge-proceso';
+    if (estado === 'Resuelto') return 'badge-resuelto';
+    return 'badge-cerrado';
+}
+
+function prioridadBadge(prioridad) {
+    if (prioridad === 'Alta') return 'badge-alta';
+    if (prioridad === 'Media') return 'badge-media';
+    return 'badge-baja';
+}
+
+function renderTicketRow(ticket) {
+    return `
+        <tr class="hover:bg-gray-50 transition ticket-row" data-estado="${safeHtml(ticket.estado)}">
+            <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(ticket.id)}</td>
+            <td class="px-4 py-3">
+                <div class="font-medium text-gray-800 text-sm">${safeHtml(ticket.titulo)}</div>
+                <div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(ticket.descripcion, 50))}</div>
+            </td>
+            <td class="px-4 py-3 hidden md:table-cell">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-bold flex-shrink-0">
+                        ${safeHtml(ticket.creador_inicial)}
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-700 font-medium">${safeHtml(ticket.creador_nombre)}</div>
+                        <div class="text-gray-400 text-xs">${safeHtml(ticket.creador_area)}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="px-4 py-3 hidden md:table-cell text-sm text-gray-600">
+                <i class="fas ${categoriaIcon(ticket.categoria)} text-gray-400 mr-1"></i>
+                ${safeHtml(categoriaTexto(ticket.categoria))}
+            </td>
+            <td class="px-4 py-3">
+                <span class="badge ${estadoBadge(ticket.estado)}">${safeHtml(ticket.estado)}</span>
+            </td>
+            <td class="px-4 py-3 hidden sm:table-cell">
+                <span class="badge ${prioridadBadge(ticket.prioridad)}">${safeHtml(ticket.prioridad)}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">
+                ${safeHtml(ticket.fecha)}
+            </td>
+            <td class="px-4 py-3 text-center">
+                <a href="${safeHtml(ticket.url)}"
+                   class="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fas fa-eye"></i> Ver
+                </a>
+            </td>
+        </tr>`;
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function actualizarContadores(stats) {
+    setText('stat-total', stats.total);
+    setText('stat-pendientes', stats.pendientes);
+    setText('stat-en-proceso', stats.en_proceso);
+    setText('stat-resueltos', stats.resueltos);
+    setText('stat-cerrados', stats.cerrados);
+    setText('quick-pendientes-count', `${stats.pendientes} sin atender`);
+    setText('filter-total', stats.total);
+    setText('filter-pendientes', stats.pendientes);
+    setText('filter-en-proceso', stats.en_proceso);
+    setText('filter-resueltos', stats.resueltos);
+}
+
+function renderTickets(tickets) {
+    const body = document.getElementById('ticketsBody');
+    const tableWrap = document.getElementById('ticketsTableWrap');
+    const empty = document.getElementById('ticketsEmpty');
+
+    if (!body || !tableWrap || !empty) return;
+
+    body.innerHTML = tickets.map(renderTicketRow).join('');
+    tableWrap.classList.toggle('hidden', tickets.length === 0);
+    empty.classList.toggle('hidden', tickets.length > 0);
+    filtrarTabla(filtroActual);
+}
+
+async function actualizarTicketsTecnico() {
+    if (document.hidden) return;
+
+    try {
+        const res = await fetch('{{ url_for("api_tecnico_tickets") }}', {
+            headers: { 'X-Requested-With': 'fetch' }
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const snapshot = JSON.stringify(data);
+        if (snapshot === ticketsSnapshot) return;
+
+        ticketsSnapshot = snapshot;
+        actualizarContadores(data.stats);
+        renderTickets(data.tickets);
+    } catch {
+        // Si falla la conexion, el dashboard queda con la ultima informacion visible.
+    }
+}
+
+ticketsSnapshot = JSON.stringify({
+    total: {{ todos_tickets|length }},
+    pendientes: {{ tickets_pendientes|length }},
+    en_proceso: {{ tickets_en_proceso|length }},
+    resueltos: {{ tickets_resueltos|length }},
+    cerrados: {{ tickets_cerrados|length }}
+});
+
+actualizarTicketsTecnico();
+setInterval(actualizarTicketsTecnico, 5000);
+document.addEventListener('visibilitychange', actualizarTicketsTecnico);
 </script>
 {% endblock %}

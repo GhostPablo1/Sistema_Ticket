@@ -435,6 +435,48 @@ def dashboard_tecnico():
                            recientes=recientes)
 
 
+@app.route('/api/tecnico/tickets')
+@login_required
+def api_tecnico_tickets():
+    if current_user.rol != 'tecnico':
+        return jsonify({'error': 'No autorizado'}), 403
+
+    todos = Ticket.query.order_by(Ticket.fecha_creacion.desc()).all()
+    pendientes = sum(1 for t in todos if t.estado == 'Pendiente')
+    en_proceso = sum(1 for t in todos if t.estado == 'En Proceso')
+    resueltos = sum(1 for t in todos if t.estado == 'Resuelto')
+    cerrados = sum(1 for t in todos if t.estado == 'Cerrado')
+
+    tickets = []
+    for ticket in todos:
+        creador = ticket.creador
+        creador_nombre = creador.nombre if creador else ''
+        tickets.append({
+            'id': ticket.id,
+            'titulo': ticket.titulo,
+            'descripcion': ticket.descripcion or '',
+            'categoria': ticket.categoria or '',
+            'estado': ticket.estado,
+            'prioridad': ticket.prioridad,
+            'fecha': ticket.fecha_creacion.strftime('%d/%m/%Y') if ticket.fecha_creacion else '',
+            'creador_nombre': creador_nombre,
+            'creador_inicial': creador_nombre[:1].upper(),
+            'creador_area': creador.area if creador else '',
+            'url': url_for('ver_ticket', ticket_id=ticket.id),
+        })
+
+    return jsonify({
+        'tickets': tickets,
+        'stats': {
+            'total': len(todos),
+            'pendientes': pendientes,
+            'en_proceso': en_proceso,
+            'resueltos': resueltos,
+            'cerrados': cerrados,
+        }
+    })
+
+
 @app.route('/tecnico/ticket/<int:ticket_id>/asignar', methods=['POST'])
 @login_required
 def asignar_ticket(ticket_id):

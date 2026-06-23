@@ -112,10 +112,10 @@
                     <label class="text-sm text-gray-600 font-medium">Estado:</label>
                     <select name="estado" onchange="this.form.submit()"
                             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="Pendiente" {% if ticket.estado=='Pendiente' %}selected{% endif %}>Pendiente</option>
-                        <option value="En Proceso" {% if ticket.estado=='En Proceso' %}selected{% endif %}>En Proceso</option>
-                        <option value="Resuelto" {% if ticket.estado=='Resuelto' %}selected{% endif %}>Resuelto</option>
                         <option value="Cerrado" {% if ticket.estado=='Cerrado' %}selected{% endif %}>Cerrado</option>
+                        <option value="En Proceso" {% if ticket.estado=='En Proceso' %}selected{% endif %}>En Proceso</option>
+                        <option value="Pendiente" {% if ticket.estado=='Pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="Resuelto" {% if ticket.estado=='Resuelto' %}selected{% endif %}>Resuelto</option>
                     </select>
                 </form>
 
