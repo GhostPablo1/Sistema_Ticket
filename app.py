@@ -3,6 +3,7 @@ import sys
 import sqlite3
 import json
 import smtplib
+import traceback
 from email.message import EmailMessage
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
@@ -165,23 +166,50 @@ def _send_smtp_email(subject, recipient, html):
     msg.set_content('Abre este correo en un cliente compatible con HTML.')
     msg.add_alternative(html, subtype='html')
 
-    timeout = app.config['MAIL_TIMEOUT']
-    if app.config['MAIL_USE_SSL']:
-        host = smtplib.SMTP_SSL(app.config['MAIL_SERVER'], app.config['MAIL_PORT'], timeout=timeout)
-    else:
-        host = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'], timeout=timeout)
+    server = app.config['MAIL_SERVER']
+    port = app.config['MAIL_PORT']
+    use_tls = app.config['MAIL_USE_TLS']
+    use_ssl = app.config['MAIL_USE_SSL']
+    attempts = [(server, port, use_tls, use_ssl)]
 
-    with host:
-        if app.config['MAIL_USE_TLS'] and not app.config['MAIL_USE_SSL']:
-            host.starttls()
-        host.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-        host.send_message(msg)
+    if server == 'smtp.gmail.com' and port == 587 and use_tls and not use_ssl:
+        attempts.append((server, 465, False, True))
+
+    errors = []
+    timeout = app.config['MAIL_TIMEOUT']
+    for smtp_server, smtp_port, smtp_tls, smtp_ssl in attempts:
+        try:
+            if smtp_ssl:
+                host = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=timeout)
+            else:
+                host = smtplib.SMTP(smtp_server, smtp_port, timeout=timeout)
+
+            with host:
+                if smtp_tls and not smtp_ssl:
+                    host.starttls()
+                host.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                host.send_message(msg)
+                return
+        except Exception as e:
+            errors.append(f"{smtp_server}:{smtp_port} tls={smtp_tls} ssl={smtp_ssl}: {type(e).__name__}: {e}")
+
+    raise RuntimeError('No se pudo enviar correo por SMTP. Intentos: ' + ' | '.join(errors))
+
+
+def _log_mail_error(action, error):
+    print(f"Error {action}: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
 
 
 def _send_email(subject, recipient, html):
     if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
-        _send_smtp_email(subject, recipient, html)
-        return
+        try:
+            _send_smtp_email(subject, recipient, html)
+            return
+        except Exception as e:
+            if not app.config['RESEND_API_KEY']:
+                raise
+            _log_mail_error('SMTP, intentando Resend', e)
 
     if app.config['RESEND_API_KEY']:
         payload = json.dumps({
@@ -337,7 +365,7 @@ def register():
         try:
             _send_verification_email(nuevo)
         except Exception as e:
-            print(f"❌ Error enviando correo: {e}", file=sys.stderr)
+            _log_mail_error('enviando correo de verificacion', e)
             flash('Cuenta creada, pero no pudimos enviar el correo de verificación. '
                   'Usa reenviar cuando el correo este configurado.', 'warning')
 
@@ -384,7 +412,7 @@ def reenviar_verificacion():
             _send_verification_email(user)
             flash('Correo de verificación reenviado. Revisa tu bandeja de entrada.', 'success')
         except Exception as e:
-            print(f"❌ Error reenviando correo: {e}", file=sys.stderr)
+            _log_mail_error('reenviando correo de verificacion', e)
             flash('No se pudo reenviar el correo. Intenta más tarde.', 'danger')
     else:
         flash('Si el correo existe y no está verificado, recibirás el mensaje.', 'info')
@@ -404,7 +432,7 @@ def recuperar_password():
             try:
                 _send_reset_email(user)
             except Exception as e:
-                print(f"❌ Error enviando reset: {e}", file=sys.stderr)
+                _log_mail_error('enviando correo de reset', e)
 
         # Mismo mensaje siempre para no revelar si el correo existe
         flash('Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.', 'info')
