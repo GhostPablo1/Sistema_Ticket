@@ -32,6 +32,8 @@ class Ticket(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     tecnico_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
     conversacion_ia = db.Column(db.Text, nullable=True)
+    informe_cierre = db.Column(db.Text, nullable=True)
+    informe_fecha = db.Column(db.DateTime, nullable=True)
 
 class MensajeIA(db.Model):
     __tablename__ = 'mensajes_ia'
@@ -40,3 +42,26 @@ class MensajeIA(db.Model):
     usuario_pregunta = db.Column(db.Text, nullable=False)
     ia_respuesta = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class MensajeTicket(db.Model):
+    __tablename__ = 'mensajes_ticket'
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    mensaje = db.Column(db.Text, nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref='mensajes_ticket', lazy=True)
+
+class Notificacion(db.Model):
+    __tablename__ = 'notificaciones'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.id'), nullable=True)
+    titulo = db.Column(db.String(140), nullable=False)
+    mensaje = db.Column(db.Text, nullable=False)
+    leida = db.Column(db.Boolean, default=False, nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref='notificaciones', lazy=True)
+    ticket = db.relationship('Ticket', backref='notificaciones', lazy=True)

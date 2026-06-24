@@ -23,7 +23,7 @@
 </div>
 
 <!-- Stats rápidas -->
-<div class="grid grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
         <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Total</div>
         <div id="admin-stat-total" class="text-2xl font-bold text-gray-800">{{ usuarios|length }}</div>
@@ -35,9 +35,14 @@
         <div class="text-gray-400 text-xs">rol usuario</div>
     </div>
     <div class="bg-white rounded-xl border border-yellow-100 p-4 shadow-sm">
-        <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Admins</div>
+        <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Técnicos</div>
         <div id="admin-stat-tecnicos" class="text-2xl font-bold text-yellow-600">{{ usuarios|selectattr('rol','eq','tecnico')|list|length }}</div>
-        <div class="text-gray-400 text-xs">rol técnico/admin</div>
+        <div class="text-gray-400 text-xs">soporte asignable</div>
+    </div>
+    <div class="bg-white rounded-xl border border-purple-100 p-4 shadow-sm">
+        <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Admins</div>
+        <div id="admin-stat-admins" class="text-2xl font-bold text-purple-700">{{ usuarios|selectattr('rol','eq','admin')|list|length }}</div>
+        <div class="text-gray-400 text-xs">administradores</div>
     </div>
 </div>
 
@@ -69,7 +74,7 @@
                     <td class="px-4 py-3">
                         <div class="flex items-center gap-3">
                             <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0
-                                {% if u.rol == 'tecnico' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                                {% if u.rol == 'admin' %}bg-purple-100 text-purple-700{% elif u.rol == 'tecnico' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
                                 {{ u.nombre[0].upper() }}
                             </div>
                             <div>
@@ -83,9 +88,13 @@
                     <td class="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{{ u.email }}</td>
                     <td class="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{{ u.area or '—' }}</td>
                     <td class="px-4 py-3">
-                        {% if u.rol == 'tecnico' %}
+                        {% if u.rol == 'admin' %}
+                        <span class="badge" style="background:#ede9fe;color:#5b21b6;">
+                            <i class="fas fa-user-shield mr-1"></i>Admin
+                        </span>
+                        {% elif u.rol == 'tecnico' %}
                         <span class="badge" style="background:#fef3c7;color:#92400e;">
-                            <i class="fas fa-shield-alt mr-1"></i>Admin
+                            <i class="fas fa-headset mr-1"></i>Técnico
                         </span>
                         {% else %}
                         <span class="badge badge-proceso">
@@ -171,7 +180,8 @@
                     <label class="block text-sm font-semibold text-gray-700 mb-1.5">Rol *</label>
                     <select name="rol"
                             class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="tecnico">Técnico / Admin</option>
+                        <option value="admin">Administrador</option>
+                        <option value="tecnico">Técnico / Soporte</option>
                         <option value="usuario" selected>Usuario</option>
                     </select>
                 </div>
@@ -219,11 +229,14 @@ function safeHtml(value) {
 }
 
 function renderUsuarioRow(usuario) {
-    const esTecnico = usuario.rol === 'tecnico';
-    const avatarClass = esTecnico ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
-    const rolBadge = esTecnico
-        ? '<span class="badge" style="background:#fef3c7;color:#92400e;"><i class="fas fa-shield-alt mr-1"></i>Admin</span>'
-        : '<span class="badge badge-proceso"><i class="fas fa-user mr-1"></i>Usuario</span>';
+    const avatarClass = usuario.rol === 'admin'
+        ? 'bg-purple-100 text-purple-700'
+        : (usuario.rol === 'tecnico' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700');
+    const rolBadge = usuario.rol === 'admin'
+        ? '<span class="badge" style="background:#ede9fe;color:#5b21b6;"><i class="fas fa-user-shield mr-1"></i>Admin</span>'
+        : (usuario.rol === 'tecnico'
+            ? '<span class="badge" style="background:#fef3c7;color:#92400e;"><i class="fas fa-headset mr-1"></i>Técnico</span>'
+            : '<span class="badge badge-proceso"><i class="fas fa-user mr-1"></i>Usuario</span>');
     const acciones = usuario.id === CURRENT_ADMIN_ID
         ? '<span class="text-xs text-gray-400 italic">Cuenta propia</span>'
         : `<form method="POST" action="${safeHtml(usuario.delete_url)}"
@@ -265,6 +278,7 @@ function actualizarStatsUsuarios(stats) {
     setText('admin-stat-total', stats.total);
     setText('admin-stat-usuarios', stats.usuarios);
     setText('admin-stat-tecnicos', stats.tecnicos);
+    setText('admin-stat-admins', stats.admins);
 }
 
 function renderUsuarios(usuarios) {
@@ -309,7 +323,8 @@ async function actualizarUsuariosAdmin() {
 adminUsuariosSnapshot = JSON.stringify({
     total: {{ usuarios|length }},
     usuarios: {{ usuarios|selectattr('rol','eq','usuario')|list|length }},
-    tecnicos: {{ usuarios|selectattr('rol','eq','tecnico')|list|length }}
+    tecnicos: {{ usuarios|selectattr('rol','eq','tecnico')|list|length }},
+    admins: {{ usuarios|selectattr('rol','eq','admin')|list|length }}
 });
 
 actualizarUsuariosAdmin();

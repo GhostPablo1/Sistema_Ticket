@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
-from database import db, Usuario, Ticket, MensajeIA
+from database import db, Usuario, Ticket, MensajeIA, MensajeTicket, Notificacion
 from ai_assistant import get_ai_response
 from datetime import datetime
 from sqlalchemy import inspect, text, func
@@ -108,6 +108,10 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 SALT_VERIFICACION = 'email-verify-2026'
 SALT_RESET        = 'password-reset-2026'
+ADMIN_ROLE = 'admin'
+TECH_ROLE = 'tecnico'
+USER_ROLE = 'usuario'
+STAFF_ROLES = {ADMIN_ROLE, TECH_ROLE}
 
 # ==================== LOGIN MANAGER ====================
 login_manager = LoginManager()
@@ -125,8 +129,10 @@ with app.app_context():
     db.create_all()
     inspector = inspect(db.engine)
     usuario_columns = {column['name'] for column in inspector.get_columns('usuarios')}
+    ticket_columns = {column['name'] for column in inspector.get_columns('tickets')}
     default_true = '1' if db.engine.dialect.name == 'sqlite' else 'TRUE'
     default_false = '0' if db.engine.dialect.name == 'sqlite' else 'FALSE'
+    added_email_verificado = False
 
     # Migración: columna activo
     if 'activo' not in usuario_columns:
@@ -139,19 +145,36 @@ with app.app_context():
         with db.engine.connect() as conn:
             conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN email_verificado BOOLEAN DEFAULT {default_false}"))
             conn.commit()
+        added_email_verificado = True
 
-    # Los usuarios ya existentes quedan como verificados automáticamente
-    Usuario.query.filter(
-        (Usuario.email_verificado.is_(None)) | (Usuario.email_verificado == False)
-    ).update({Usuario.email_verificado: True}, synchronize_session=False)
-    db.session.commit()
+    if 'informe_cierre' not in ticket_columns:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN informe_cierre TEXT"))
+            conn.commit()
 
-    if not Usuario.query.filter_by(email='tecnico@bellavista.gob.pe').first():
+    if 'informe_fecha' not in ticket_columns:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN informe_fecha TIMESTAMP"))
+            conn.commit()
+
+    if added_email_verificado:
+        # Solo las cuentas antiguas, creadas antes de existir la verificacion, quedan verificadas.
+        Usuario.query.filter(
+            (Usuario.email_verificado.is_(None)) | (Usuario.email_verificado == False)
+        ).update({Usuario.email_verificado: True}, synchronize_session=False)
+        db.session.commit()
+
+    admin_demo = Usuario.query.filter_by(email='tecnico@bellavista.gob.pe').first()
+    if admin_demo:
+        admin_demo.rol = ADMIN_ROLE
+        admin_demo.area = admin_demo.area or 'Informática'
+        admin_demo.email_verificado = True
+    else:
         db.session.add(Usuario(
             nombre='Administrador TI',
             email='tecnico@bellavista.gob.pe',
             password='tecnico0123',
-            rol='tecnico',
+            rol=ADMIN_ROLE,
             area='Informática',
             activo=True,
             email_verificado=True,
@@ -162,7 +185,7 @@ with app.app_context():
             nombre='Usuario Demo',
             email='usuario@bellavista.gob.pe',
             password='usuario123',
-            rol='usuario',
+            rol=USER_ROLE,
             area='Administración',
             activo=True,
             email_verificado=True,
@@ -344,6 +367,160 @@ def _send_reset_email(usuario):
     _send_email('Recupera tu contraseña — TicketIA Bellavista', usuario.email, html)
 
 
+def _is_admin(user=None):
+    user = user or current_user
+    return user.is_authenticated and user.rol == ADMIN_ROLE
+
+
+def _is_staff(user=None):
+    user = user or current_user
+    return user.is_authenticated and user.rol in STAFF_ROLES
+
+
+def _is_assigned_tech(ticket, user=None):
+    user = user or current_user
+    return user.is_authenticated and user.rol == TECH_ROLE and ticket.tecnico_id == user.id
+
+
+def _can_view_ticket(ticket):
+    return (
+        _is_admin()
+        or ticket.usuario_id == current_user.id
+        or _is_assigned_tech(ticket)
+    )
+
+
+def _can_manage_ticket(ticket):
+    return _is_admin() or _is_assigned_tech(ticket)
+
+
+def _ticket_query_for_current_user():
+    if _is_admin():
+        return Ticket.query
+    if current_user.rol == TECH_ROLE:
+        return Ticket.query.filter_by(tecnico_id=current_user.id)
+    return Ticket.query.filter_by(usuario_id=current_user.id)
+
+
+def _tecnicos_activos():
+    return Usuario.query.filter_by(rol=TECH_ROLE, activo=True).order_by(Usuario.nombre.asc()).all()
+
+
+def _admin_users():
+    return Usuario.query.filter_by(rol=ADMIN_ROLE, activo=True).all()
+
+
+def _notify_user(usuario_id, titulo, mensaje, ticket_id=None):
+    if not usuario_id:
+        return
+    db.session.add(Notificacion(
+        usuario_id=usuario_id,
+        ticket_id=ticket_id,
+        titulo=titulo,
+        mensaje=mensaje,
+        leida=False,
+    ))
+
+
+def _notify_admins(titulo, mensaje, ticket_id=None, exclude_user_id=None):
+    for admin in _admin_users():
+        if admin.id != exclude_user_id:
+            _notify_user(admin.id, titulo, mensaje, ticket_id)
+
+
+def _notification_json(notificacion):
+    return {
+        'id': notificacion.id,
+        'titulo': notificacion.titulo,
+        'mensaje': notificacion.mensaje,
+        'leida': notificacion.leida,
+        'fecha': notificacion.fecha.strftime('%d/%m/%Y %H:%M') if notificacion.fecha else '',
+        'url': url_for('ver_ticket', ticket_id=notificacion.ticket_id) if notificacion.ticket_id else '',
+    }
+
+
+def _mensaje_ticket_json(mensaje):
+    autor = mensaje.usuario
+    return {
+        'id': mensaje.id,
+        'mensaje': mensaje.mensaje,
+        'autor': autor.nombre if autor else 'Usuario',
+        'autor_rol': autor.rol if autor else '',
+        'propio': mensaje.usuario_id == current_user.id,
+        'fecha': mensaje.fecha.strftime('%d/%m/%Y %H:%M') if mensaje.fecha else '',
+    }
+
+
+def _build_ticket_report(ticket):
+    mensajes = MensajeTicket.query.filter_by(ticket_id=ticket.id).order_by(MensajeTicket.fecha.asc()).all()
+    historial = []
+    for mensaje in mensajes:
+        autor = mensaje.usuario.nombre if mensaje.usuario else 'Usuario'
+        fecha = mensaje.fecha.strftime('%d/%m/%Y %H:%M') if mensaje.fecha else ''
+        historial.append(f"- {fecha} | {autor}: {mensaje.mensaje}")
+
+    historial_texto = '\n'.join(historial) if historial else 'No hubo mensajes entre usuario y soporte.'
+    tecnico = ticket.tecnico.nombre if ticket.tecnico else 'Sin tecnico asignado'
+    fecha_creacion = ticket.fecha_creacion.strftime('%d/%m/%Y %H:%M') if ticket.fecha_creacion else 'Sin fecha'
+    fecha_cierre = ticket.fecha_resolucion.strftime('%d/%m/%Y %H:%M') if ticket.fecha_resolucion else datetime.utcnow().strftime('%d/%m/%Y %H:%M')
+
+    return (
+        f"INFORME DE CIERRE - TICKET #{ticket.id}\n\n"
+        f"Solicitante: {ticket.creador.nombre if ticket.creador else 'No disponible'}\n"
+        f"Area solicitante: {ticket.creador.area if ticket.creador and ticket.creador.area else 'No registrada'}\n"
+        f"Tecnico responsable: {tecnico}\n"
+        f"Categoria: {ticket.categoria or 'No registrada'}\n"
+        f"Prioridad: {ticket.prioridad or 'No registrada'}\n"
+        f"Estado final: {ticket.estado}\n"
+        f"Fecha de creacion: {fecha_creacion}\n"
+        f"Fecha de cierre: {fecha_cierre}\n\n"
+        f"Problema reportado:\n{ticket.descripcion or 'Sin descripcion'}\n\n"
+        f"Historial de comunicacion:\n{historial_texto}\n\n"
+        f"Conclusion:\nEl ticket fue marcado como {ticket.estado}. Este informe fue generado automaticamente por TicketIA."
+    )
+
+
+def _ensure_ticket_report(ticket, force=False):
+    if ticket.estado not in ['Resuelto', 'Cerrado']:
+        return
+    if ticket.informe_cierre and not force:
+        return
+    ticket.informe_cierre = _build_ticket_report(ticket)
+    ticket.informe_fecha = datetime.utcnow()
+
+
+def _set_ticket_status(ticket, nuevo_estado):
+    estado_anterior = ticket.estado
+    ticket.estado = nuevo_estado
+    if nuevo_estado in ['Resuelto', 'Cerrado']:
+        ticket.fecha_resolucion = ticket.fecha_resolucion or datetime.utcnow()
+        _ensure_ticket_report(ticket, force=(nuevo_estado == 'Cerrado'))
+    elif estado_anterior in ['Resuelto', 'Cerrado']:
+        ticket.fecha_resolucion = None
+
+    if estado_anterior != nuevo_estado:
+        _notify_user(
+            ticket.usuario_id,
+            'Estado actualizado',
+            f'Tu ticket #{ticket.id} cambio a {nuevo_estado}.',
+            ticket.id,
+        )
+        if ticket.tecnico_id and ticket.tecnico_id != current_user.id:
+            _notify_user(
+                ticket.tecnico_id,
+                'Estado actualizado',
+                f'El ticket #{ticket.id} cambio a {nuevo_estado}.',
+                ticket.id,
+            )
+        if not _is_admin():
+            _notify_admins(
+                'Estado actualizado',
+                f'El ticket #{ticket.id} cambio a {nuevo_estado}.',
+                ticket.id,
+                exclude_user_id=current_user.id,
+            )
+
+
 # ==================== RUTAS PÚBLICAS ====================
 def _ticket_json(ticket):
     creador = ticket.creador
@@ -364,20 +541,32 @@ def _ticket_json(ticket):
         'creador_nombre': creador_nombre,
         'creador_inicial': creador_nombre[:1].upper(),
         'creador_area': creador.area if creador else '',
+        'tecnico_id': ticket.tecnico_id,
         'tecnico_nombre': tecnico_nombre,
         'tecnico_area': tecnico.area if tecnico else '',
         'tecnico_email': tecnico.email if tecnico else '',
+        'informe_fecha': ticket.informe_fecha.strftime('%d/%m/%Y %H:%M') if ticket.informe_fecha else '',
+        'informe_cierre': ticket.informe_cierre or '',
+        'tiene_informe': bool(ticket.informe_cierre),
         'url': url_for('ver_ticket', ticket_id=ticket.id),
+        'assign_url': url_for('admin_asignar_ticket', ticket_id=ticket.id),
+        'delete_url': url_for('admin_eliminar_ticket', ticket_id=ticket.id),
     }
 
 
 def _usuario_json(usuario):
+    rol_label = {
+        ADMIN_ROLE: 'Administrador',
+        TECH_ROLE: 'Tecnico',
+        USER_ROLE: 'Usuario',
+    }.get(usuario.rol, usuario.rol)
     return {
         'id': usuario.id,
         'nombre': usuario.nombre,
         'inicial': usuario.nombre[:1].upper(),
         'email': usuario.email,
         'rol': usuario.rol,
+        'rol_label': rol_label,
         'area': usuario.area or '',
         'fecha_registro': usuario.fecha_registro.strftime('%d/%m/%Y') if usuario.fecha_registro else '',
         'delete_url': url_for('admin_eliminar_usuario', user_id=usuario.id),
@@ -392,7 +581,7 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        if current_user.rol == 'tecnico':
+        if current_user.rol in STAFF_ROLES:
             return redirect(url_for('dashboard_tecnico'))
         return redirect(url_for('dashboard_usuario'))
 
@@ -407,7 +596,7 @@ def login():
                 flash('Debes verificar tu correo electrónico antes de iniciar sesión.', 'warning')
                 return redirect(url_for('verificar_pendiente'))
             login_user(user)
-            if user.rol == 'tecnico':
+            if user.rol in STAFF_ROLES:
                 return redirect(url_for('dashboard_tecnico'))
             return redirect(url_for('dashboard_usuario'))
 
@@ -442,7 +631,7 @@ def register():
             return render_template('register.html')
 
         nuevo = Usuario(nombre=nombre, email=email, password=password,
-                        rol='usuario', area=area, activo=True,
+                        rol=USER_ROLE, area=area, activo=True,
                         email_verificado=False)
         db.session.add(nuevo)
         db.session.commit()
@@ -570,7 +759,7 @@ def logout():
 @app.route('/dashboard/usuario')
 @login_required
 def dashboard_usuario():
-    if current_user.rol != 'usuario':
+    if current_user.rol != USER_ROLE:
         return redirect(url_for('dashboard_tecnico'))
     tickets    = Ticket.query.filter_by(usuario_id=current_user.id).order_by(Ticket.fecha_creacion.desc()).all()
     pendientes = sum(1 for t in tickets if t.estado == 'Pendiente')
@@ -583,7 +772,7 @@ def dashboard_usuario():
 @app.route('/api/usuario/tickets')
 @login_required
 def api_usuario_tickets():
-    if current_user.rol != 'usuario':
+    if current_user.rol != USER_ROLE:
         return jsonify({'error': 'No autorizado'}), 403
 
     tickets = Ticket.query.filter_by(usuario_id=current_user.id).order_by(Ticket.fecha_creacion.desc()).all()
@@ -605,6 +794,9 @@ def api_usuario_tickets():
 @app.route('/ticket/nuevo', methods=['GET', 'POST'])
 @login_required
 def nuevo_ticket():
+    if current_user.rol != USER_ROLE:
+        return redirect(url_for('dashboard_tecnico'))
+
     if request.method == 'POST':
         titulo      = request.form['titulo']
         descripcion = request.form['descripcion']
@@ -613,6 +805,12 @@ def nuevo_ticket():
         nuevo = Ticket(titulo=titulo, descripcion=descripcion, categoria=categoria,
                        prioridad=prioridad, usuario_id=current_user.id, estado='Pendiente')
         db.session.add(nuevo)
+        db.session.commit()
+        _notify_admins(
+            'Nuevo ticket pendiente',
+            f'{current_user.nombre} creo el ticket #{nuevo.id}: {nuevo.titulo}',
+            nuevo.id,
+        )
         db.session.commit()
         flash('Ticket creado exitosamente. El equipo de soporte lo atenderá pronto.', 'success')
         return redirect(url_for('dashboard_usuario'))
@@ -623,18 +821,25 @@ def nuevo_ticket():
 @login_required
 def ver_ticket(ticket_id):
     ticket = Ticket.query.get_or_404(ticket_id)
-    if current_user.rol != 'tecnico' and ticket.usuario_id != current_user.id:
+    if not _can_view_ticket(ticket):
         flash('No tienes permiso para ver este ticket.', 'danger')
-        return redirect(url_for('dashboard_usuario'))
+        return redirect(url_for('dashboard_tecnico') if _is_staff() else url_for('dashboard_usuario'))
     mensajes_ia = MensajeIA.query.filter_by(ticket_id=ticket.id).order_by(MensajeIA.timestamp).all()
-    return render_template('detalle_ticket.html', ticket=ticket, mensajes_ia=mensajes_ia)
+    mensajes_ticket = MensajeTicket.query.filter_by(ticket_id=ticket.id).order_by(MensajeTicket.fecha.asc()).all()
+    return render_template(
+        'detalle_ticket.html',
+        ticket=ticket,
+        mensajes_ia=mensajes_ia,
+        mensajes_ticket=mensajes_ticket,
+        tecnicos=_tecnicos_activos(),
+    )
 
 
 @app.route('/api/ticket/<int:ticket_id>/resumen')
 @login_required
 def api_ticket_resumen(ticket_id):
     ticket = Ticket.query.get_or_404(ticket_id)
-    if current_user.rol != 'tecnico' and ticket.usuario_id != current_user.id:
+    if not _can_view_ticket(ticket):
         return jsonify({'error': 'No autorizado'}), 403
 
     return jsonify({
@@ -652,7 +857,7 @@ def chat_ia():
     respuesta = get_ai_response(pregunta, current_user.nombre)
     if ticket_id:
         ticket = Ticket.query.get(ticket_id)
-        if ticket and (ticket.usuario_id == current_user.id or current_user.rol == 'tecnico'):
+        if ticket and _can_view_ticket(ticket):
             db.session.add(MensajeIA(ticket_id=ticket.id,
                                      usuario_pregunta=pregunta,
                                      ia_respuesta=respuesta))
@@ -664,9 +869,8 @@ def chat_ia():
 @login_required
 def cerrar_ticket(ticket_id):
     ticket = Ticket.query.get_or_404(ticket_id)
-    if ticket.usuario_id == current_user.id or current_user.rol == 'tecnico':
-        ticket.estado = 'Cerrado'
-        ticket.fecha_resolucion = datetime.utcnow()
+    if ticket.usuario_id == current_user.id or _can_manage_ticket(ticket):
+        _set_ticket_status(ticket, 'Cerrado')
         db.session.commit()
         flash('Ticket cerrado correctamente.', 'success')
     return redirect(url_for('ver_ticket', ticket_id=ticket.id))
@@ -676,15 +880,15 @@ def cerrar_ticket(ticket_id):
 @app.route('/dashboard/tecnico')
 @login_required
 def dashboard_tecnico():
-    if current_user.rol != 'tecnico':
+    if not _is_staff():
         return redirect(url_for('dashboard_usuario'))
 
-    todos      = Ticket.query.order_by(Ticket.fecha_creacion.desc()).all()
+    todos      = _ticket_query_for_current_user().order_by(Ticket.fecha_creacion.desc()).all()
     pendientes = [t for t in todos if t.estado == 'Pendiente']
     en_proceso = [t for t in todos if t.estado == 'En Proceso']
     resueltos  = [t for t in todos if t.estado == 'Resuelto']
     cerrados   = [t for t in todos if t.estado == 'Cerrado']
-    total_usuarios = Usuario.query.filter_by(rol='usuario').count()
+    total_usuarios = Usuario.query.filter_by(rol=USER_ROLE).count()
     recientes  = todos[:10]
 
     return render_template('dashboard_tecnico.html',
@@ -694,41 +898,24 @@ def dashboard_tecnico():
                            tickets_resueltos=resueltos,
                            tickets_cerrados=cerrados,
                            total_usuarios=total_usuarios,
-                           recientes=recientes)
+                           recientes=recientes,
+                           tecnicos=_tecnicos_activos())
 
 
 @app.route('/api/tecnico/tickets')
 @login_required
 def api_tecnico_tickets():
-    if current_user.rol != 'tecnico':
+    if not _is_staff():
         return jsonify({'error': 'No autorizado'}), 403
 
-    todos = Ticket.query.order_by(Ticket.fecha_creacion.desc()).all()
+    todos = _ticket_query_for_current_user().order_by(Ticket.fecha_creacion.desc()).all()
     pendientes = sum(1 for t in todos if t.estado == 'Pendiente')
     en_proceso = sum(1 for t in todos if t.estado == 'En Proceso')
     resueltos = sum(1 for t in todos if t.estado == 'Resuelto')
     cerrados = sum(1 for t in todos if t.estado == 'Cerrado')
 
-    tickets = []
-    for ticket in todos:
-        creador = ticket.creador
-        creador_nombre = creador.nombre if creador else ''
-        tickets.append({
-            'id': ticket.id,
-            'titulo': ticket.titulo,
-            'descripcion': ticket.descripcion or '',
-            'categoria': ticket.categoria or '',
-            'estado': ticket.estado,
-            'prioridad': ticket.prioridad,
-            'fecha': ticket.fecha_creacion.strftime('%d/%m/%Y') if ticket.fecha_creacion else '',
-            'creador_nombre': creador_nombre,
-            'creador_inicial': creador_nombre[:1].upper(),
-            'creador_area': creador.area if creador else '',
-            'url': url_for('ver_ticket', ticket_id=ticket.id),
-        })
-
     return jsonify({
-        'tickets': tickets,
+        'tickets': [_ticket_json(ticket) for ticket in todos],
         'stats': {
             'total': len(todos),
             'pendientes': pendientes,
@@ -739,40 +926,196 @@ def api_tecnico_tickets():
     })
 
 
+@app.route('/admin/ticket/<int:ticket_id>/asignar', methods=['POST'])
+@login_required
+def admin_asignar_ticket(ticket_id):
+    if not _is_admin():
+        return redirect(url_for('dashboard_usuario'))
+
+    ticket = Ticket.query.get_or_404(ticket_id)
+    tecnico_id = request.form.get('tecnico_id', type=int)
+    if not tecnico_id:
+        ticket.tecnico_id = None
+        if ticket.estado == 'En Proceso':
+            ticket.estado = 'Pendiente'
+        _notify_user(
+            ticket.usuario_id,
+            'Ticket sin tecnico asignado',
+            f'Tu ticket #{ticket.id} quedo pendiente de reasignacion.',
+            ticket.id,
+        )
+        db.session.commit()
+        flash('Ticket dejado sin asignar.', 'success')
+        return redirect(request.referrer or url_for('ver_ticket', ticket_id=ticket.id))
+
+    tecnico = Usuario.query.filter_by(id=tecnico_id, rol=TECH_ROLE, activo=True).first()
+    if not tecnico:
+        flash('Selecciona un tecnico valido para asignar el ticket.', 'danger')
+        return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+
+    ticket.tecnico_id = tecnico.id
+    if ticket.estado == 'Pendiente':
+        ticket.estado = 'En Proceso'
+    _notify_user(
+        tecnico.id,
+        'Ticket asignado',
+        f'Se te asigno el ticket #{ticket.id}: {ticket.titulo}',
+        ticket.id,
+    )
+    _notify_user(
+        ticket.usuario_id,
+        'Tecnico asignado',
+        f'{tecnico.nombre} fue asignado a tu ticket #{ticket.id}.',
+        ticket.id,
+    )
+    db.session.commit()
+    flash(f'Ticket asignado a {tecnico.nombre}.', 'success')
+    return redirect(request.referrer or url_for('ver_ticket', ticket_id=ticket.id))
+
+
 @app.route('/tecnico/ticket/<int:ticket_id>/asignar', methods=['POST'])
 @login_required
 def asignar_ticket(ticket_id):
-    if current_user.rol != 'tecnico':
-        return redirect(url_for('dashboard_usuario'))
-    ticket = Ticket.query.get_or_404(ticket_id)
-    ticket.tecnico_id = current_user.id
-    ticket.estado = 'En Proceso'
-    db.session.commit()
-    flash('Ticket asignado y en proceso.', 'success')
-    return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+    return redirect(url_for('ver_ticket', ticket_id=ticket_id))
 
 
 @app.route('/tecnico/ticket/<int:ticket_id>/update', methods=['POST'])
 @login_required
 def update_ticket_estado(ticket_id):
-    if current_user.rol != 'tecnico':
-        return redirect(url_for('dashboard_usuario'))
     ticket = Ticket.query.get_or_404(ticket_id)
+    if not _can_manage_ticket(ticket):
+        flash('No tienes permiso para modificar este ticket.', 'danger')
+        return redirect(url_for('dashboard_tecnico') if _is_staff() else url_for('dashboard_usuario'))
+
     nuevo_estado = request.form.get('estado')
     if nuevo_estado in ['Pendiente', 'En Proceso', 'Resuelto', 'Cerrado']:
-        ticket.estado = nuevo_estado
-        if nuevo_estado in ['Resuelto', 'Cerrado'] and not ticket.fecha_resolucion:
-            ticket.fecha_resolucion = datetime.utcnow()
+        _set_ticket_status(ticket, nuevo_estado)
         db.session.commit()
         flash('Estado del ticket actualizado.', 'success')
     return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+
+
+@app.route('/admin/ticket/<int:ticket_id>/eliminar', methods=['POST'])
+@login_required
+def admin_eliminar_ticket(ticket_id):
+    if not _is_admin():
+        return redirect(url_for('dashboard_usuario'))
+
+    ticket = Ticket.query.get_or_404(ticket_id)
+    titulo = ticket.titulo
+    MensajeIA.query.filter_by(ticket_id=ticket.id).delete()
+    MensajeTicket.query.filter_by(ticket_id=ticket.id).delete()
+    Notificacion.query.filter_by(ticket_id=ticket.id).delete()
+    db.session.delete(ticket)
+    db.session.commit()
+    flash(f'Ticket "{titulo}" eliminado.', 'success')
+    return redirect(url_for('dashboard_tecnico'))
+
+
+@app.route('/ticket/<int:ticket_id>/informe/regenerar', methods=['POST'])
+@login_required
+def regenerar_informe_ticket(ticket_id):
+    ticket = Ticket.query.get_or_404(ticket_id)
+    if not _can_manage_ticket(ticket):
+        flash('No tienes permiso para generar el informe.', 'danger')
+        return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+
+    if ticket.estado not in ['Resuelto', 'Cerrado']:
+        flash('El informe se genera cuando el ticket esta resuelto o cerrado.', 'warning')
+        return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+
+    _ensure_ticket_report(ticket, force=True)
+    db.session.commit()
+    flash('Informe actualizado.', 'success')
+    return redirect(url_for('ver_ticket', ticket_id=ticket.id))
+
+
+@app.route('/api/ticket/<int:ticket_id>/mensajes', methods=['GET', 'POST'])
+@login_required
+def api_ticket_mensajes(ticket_id):
+    ticket = Ticket.query.get_or_404(ticket_id)
+    if not _can_view_ticket(ticket):
+        return jsonify({'error': 'No autorizado'}), 403
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        mensaje = (data.get('mensaje') or '').strip()
+        if not mensaje:
+            return jsonify({'error': 'El mensaje no puede estar vacio'}), 400
+
+        nuevo = MensajeTicket(ticket_id=ticket.id, usuario_id=current_user.id, mensaje=mensaje)
+        db.session.add(nuevo)
+
+        if current_user.id == ticket.usuario_id:
+            if ticket.tecnico_id:
+                _notify_user(
+                    ticket.tecnico_id,
+                    'Nuevo mensaje del usuario',
+                    f'{current_user.nombre} escribio en el ticket #{ticket.id}.',
+                    ticket.id,
+                )
+            else:
+                _notify_admins(
+                    'Mensaje en ticket sin asignar',
+                    f'{current_user.nombre} escribio en el ticket #{ticket.id}.',
+                    ticket.id,
+                )
+        else:
+            _notify_user(
+                ticket.usuario_id,
+                'Nuevo mensaje de soporte',
+                f'{current_user.nombre} escribio en tu ticket #{ticket.id}.',
+                ticket.id,
+            )
+            if _is_admin() and ticket.tecnico_id and ticket.tecnico_id != current_user.id:
+                _notify_user(
+                    ticket.tecnico_id,
+                    'Nuevo mensaje del administrador',
+                    f'{current_user.nombre} escribio en el ticket #{ticket.id}.',
+                    ticket.id,
+                )
+            if _is_assigned_tech(ticket):
+                _notify_admins(
+                    'Soporte respondio un ticket',
+                    f'{current_user.nombre} respondio el ticket #{ticket.id}.',
+                    ticket.id,
+                    exclude_user_id=current_user.id,
+                )
+
+        db.session.commit()
+        return jsonify({'mensaje': _mensaje_ticket_json(nuevo)}), 201
+
+    mensajes = MensajeTicket.query.filter_by(ticket_id=ticket.id).order_by(MensajeTicket.fecha.asc()).all()
+    return jsonify({'mensajes': [_mensaje_ticket_json(mensaje) for mensaje in mensajes]})
+
+
+@app.route('/api/notificaciones')
+@login_required
+def api_notificaciones():
+    notificaciones = Notificacion.query.filter_by(usuario_id=current_user.id).order_by(Notificacion.fecha.desc()).limit(12).all()
+    sin_leer = Notificacion.query.filter_by(usuario_id=current_user.id, leida=False).count()
+    return jsonify({
+        'sin_leer': sin_leer,
+        'notificaciones': [_notification_json(notificacion) for notificacion in notificaciones],
+    })
+
+
+@app.route('/api/notificaciones/marcar-leidas', methods=['POST'])
+@login_required
+def api_notificaciones_marcar_leidas():
+    Notificacion.query.filter_by(usuario_id=current_user.id, leida=False).update(
+        {Notificacion.leida: True},
+        synchronize_session=False,
+    )
+    db.session.commit()
+    return jsonify({'ok': True})
 
 
 # ==================== ADMIN USUARIOS ====================
 @app.route('/admin/usuarios')
 @login_required
 def admin_usuarios():
-    if current_user.rol != 'tecnico':
+    if not _is_admin():
         return redirect(url_for('dashboard_usuario'))
     usuarios = Usuario.query.order_by(Usuario.fecha_registro.desc()).all()
     return render_template('admin_usuarios.html', usuarios=usuarios)
@@ -781,12 +1124,13 @@ def admin_usuarios():
 @app.route('/api/admin/usuarios')
 @login_required
 def api_admin_usuarios():
-    if current_user.rol != 'tecnico':
+    if not _is_admin():
         return jsonify({'error': 'No autorizado'}), 403
 
     usuarios = Usuario.query.order_by(Usuario.fecha_registro.desc()).all()
-    usuarios_rol = sum(1 for u in usuarios if u.rol == 'usuario')
-    tecnicos_rol = sum(1 for u in usuarios if u.rol == 'tecnico')
+    usuarios_rol = sum(1 for u in usuarios if u.rol == USER_ROLE)
+    tecnicos_rol = sum(1 for u in usuarios if u.rol == TECH_ROLE)
+    admins_rol = sum(1 for u in usuarios if u.rol == ADMIN_ROLE)
 
     return jsonify({
         'usuarios': [_usuario_json(usuario) for usuario in usuarios],
@@ -794,6 +1138,7 @@ def api_admin_usuarios():
             'total': len(usuarios),
             'usuarios': usuarios_rol,
             'tecnicos': tecnicos_rol,
+            'admins': admins_rol,
         }
     })
 
@@ -801,13 +1146,16 @@ def api_admin_usuarios():
 @app.route('/admin/usuario/crear', methods=['POST'])
 @login_required
 def admin_crear_usuario():
-    if current_user.rol != 'tecnico':
+    if not _is_admin():
         return redirect(url_for('dashboard_usuario'))
     nombre   = request.form['nombre'].strip()
     email    = request.form['email'].strip().lower()
     password = request.form['password']
-    rol      = request.form.get('rol', 'usuario')
+    rol      = request.form.get('rol', USER_ROLE)
     area     = request.form.get('area', '').strip()
+
+    if rol not in [USER_ROLE, TECH_ROLE, ADMIN_ROLE]:
+        rol = USER_ROLE
 
     if Usuario.query.filter_by(email=email).first():
         flash('Ya existe un usuario con ese correo electrónico.', 'danger')
@@ -823,7 +1171,7 @@ def admin_crear_usuario():
 @app.route('/admin/usuario/<int:user_id>/eliminar', methods=['POST'])
 @login_required
 def admin_eliminar_usuario(user_id):
-    if current_user.rol != 'tecnico':
+    if not _is_admin():
         return redirect(url_for('dashboard_usuario'))
     usuario = Usuario.query.get_or_404(user_id)
     if usuario.id == current_user.id:
@@ -840,7 +1188,7 @@ def admin_eliminar_usuario(user_id):
 @app.route('/reportes/estadisticas')
 @login_required
 def estadisticas():
-    if current_user.rol != 'tecnico':
+    if not _is_admin():
         return redirect(url_for('dashboard_usuario'))
     tickets_por_categoria = [(cat, cnt) for cat, cnt in db.session.query(Ticket.categoria, func.count(Ticket.id)).group_by(Ticket.categoria).all()]
     tickets_por_estado    = [(est, cnt) for est, cnt in db.session.query(Ticket.estado, func.count(Ticket.id)).group_by(Ticket.estado).all()]

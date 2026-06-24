@@ -103,8 +103,8 @@
         </div>
 
         <!-- Acciones para técnico -->
-        {% if current_user.rol == 'tecnico' %}
-        <div id="userCloseTicketAction" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        {% if current_user.rol in ['admin', 'tecnico'] %}
+        <div id="ticketManageAction" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
             <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <i class="fas fa-tools text-blue-600"></i> Gestión del Ticket
             </h3>
@@ -121,21 +121,37 @@
                     </select>
                 </form>
 
-                {% if not ticket.tecnico_id %}
-                <form method="POST" action="{{ url_for('asignar_ticket', ticket_id=ticket.id) }}">
-                    <button type="submit"
-                            class="bg-yellow-500 hover:bg-yellow-400 text-white font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
-                        <i class="fas fa-user-check"></i> Asignarme este ticket
-                    </button>
+                {% if current_user.rol == 'admin' %}
+                <form method="POST" action="{{ url_for('admin_asignar_ticket', ticket_id=ticket.id) }}" class="flex items-center gap-2">
+                    <label class="text-sm text-gray-600 font-medium">Asignar:</label>
+                    <select name="tecnico_id" onchange="this.form.submit()"
+                            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Sin asignar</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.id }}" {% if ticket.tecnico_id == tecnico.id %}selected{% endif %}>
+                            {{ tecnico.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </form>
                 {% endif %}
 
                 {% if ticket.estado not in ['Cerrado'] %}
-                <a href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
+                <a id="ticketCloseAction" href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
                    onclick="return confirm('¿Cerrar este ticket?')"
                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
                     <i class="fas fa-times-circle"></i> Cerrar
                 </a>
+                {% endif %}
+
+                {% if current_user.rol == 'admin' %}
+                <form method="POST" action="{{ url_for('admin_eliminar_ticket', ticket_id=ticket.id) }}"
+                      onsubmit="return confirm('¿Eliminar este ticket? Esta acción no se puede deshacer.')">
+                    <button type="submit"
+                            class="bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                        <i class="fas fa-trash"></i> Borrar ticket
+                    </button>
+                </form>
                 {% endif %}
             </div>
         </div>
@@ -144,7 +160,7 @@
         <!-- Acciones para usuario -->
         {% if current_user.rol == 'usuario' and ticket.usuario_id == current_user.id %}
         {% if ticket.estado not in ['Cerrado', 'Resuelto'] %}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div id="userCloseTicketAction" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
             <div class="flex items-center justify-between">
                 <div>
                     <h3 class="font-semibold text-gray-800 text-sm">¿El problema fue resuelto?</h3>
@@ -159,6 +175,28 @@
         </div>
         {% endif %}
         {% endif %}
+
+        <div id="ticketInformeCard" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 {% if ticket.estado not in ['Resuelto', 'Cerrado'] %}hidden{% endif %}">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-file-alt text-green-600"></i> Informe de cierre
+                    </h3>
+                    <p id="ticketInformeFecha" class="text-xs text-gray-500 mt-1">
+                        {% if ticket.informe_fecha %}Generado el {{ ticket.informe_fecha.strftime('%d/%m/%Y %H:%M') }}{% else %}Pendiente de generar{% endif %}
+                    </p>
+                </div>
+                {% if current_user.rol in ['admin', 'tecnico'] %}
+                <form method="POST" action="{{ url_for('regenerar_informe_ticket', ticket_id=ticket.id) }}">
+                    <button type="submit"
+                            class="bg-green-50 hover:bg-green-100 text-green-700 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                        <i class="fas fa-sync-alt"></i> Regenerar
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            <pre id="ticketInformeTexto" class="whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-4 overflow-x-auto">{{ ticket.informe_cierre or 'El informe se generará automáticamente al cerrar el ticket.' }}</pre>
+        </div>
 
     </div>
 
@@ -273,6 +311,45 @@
 
 </div>
 
+<!-- ===== CHAT USUARIO / SOPORTE ===== -->
+<div class="mt-6 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div>
+            <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-comments text-blue-600"></i> Conversación con soporte
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Mensajes en tiempo real entre el solicitante y el equipo asignado.</p>
+        </div>
+        <span id="supportChatCount" class="text-xs text-gray-500">{{ mensajes_ticket|length }} mensaje(s)</span>
+    </div>
+    <div id="supportChatMessages" class="p-4 space-y-3 max-h-96 overflow-y-auto scrollbar-thin bg-gray-50">
+        {% for msg in mensajes_ticket %}
+        <div class="flex {% if msg.usuario_id == current_user.id %}justify-end{% else %}justify-start{% endif %}">
+            <div class="max-w-xl {% if msg.usuario_id == current_user.id %}bg-blue-700 text-white{% else %}bg-white border border-gray-200 text-gray-700{% endif %} rounded-2xl px-4 py-3 shadow-sm">
+                <div class="text-xs {% if msg.usuario_id == current_user.id %}text-blue-100{% else %}text-gray-400{% endif %} mb-1">
+                    {{ msg.usuario.nombre }} · {{ msg.fecha.strftime('%d/%m/%Y %H:%M') if msg.fecha else '' }}
+                </div>
+                <div class="text-sm whitespace-pre-line">{{ msg.mensaje }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div id="supportChatEmpty" class="text-center text-sm text-gray-400 py-8">
+            Aún no hay mensajes. Escribe para iniciar la conversación del ticket.
+        </div>
+        {% endfor %}
+    </div>
+    <form id="supportChatForm" class="p-4 border-t border-gray-100 flex gap-2 bg-white">
+        <input type="text" id="supportChatInput"
+               class="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+               placeholder="Escribe un mensaje para este ticket...">
+        <button type="submit" id="supportChatSend"
+                class="bg-blue-800 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition flex items-center gap-2">
+            <i class="fas fa-paper-plane"></i>
+            <span class="hidden sm:inline">Enviar</span>
+        </button>
+    </form>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -358,6 +435,7 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
 <script>
 const LIVE_TICKET_ID = {{ ticket.id }};
 let ticketResumenSnapshot = '';
+let supportChatSnapshot = '';
 
 function liveSafeHtml(value) {
     return String(value ?? '')
@@ -416,6 +494,11 @@ function setTicketActions(estado) {
         userCloseAction.classList.toggle('hidden', estado === 'Cerrado' || estado === 'Resuelto');
     }
 
+    const ticketCloseAction = document.getElementById('ticketCloseAction');
+    if (ticketCloseAction) {
+        ticketCloseAction.classList.toggle('hidden', estado === 'Cerrado');
+    }
+
     const estadoSelect = document.querySelector('select[name="estado"]');
     if (estadoSelect && estadoSelect.value !== estado) {
         estadoSelect.value = estado;
@@ -430,6 +513,112 @@ function renderTicketResumen(ticket) {
 
     const estadoTexto = document.getElementById('ticketEstadoTexto');
     if (estadoTexto) estadoTexto.textContent = ticket.estado;
+
+    const informeCard = document.getElementById('ticketInformeCard');
+    if (informeCard) {
+        informeCard.classList.toggle('hidden', ticket.estado !== 'Resuelto' && ticket.estado !== 'Cerrado');
+    }
+
+    const informeFecha = document.getElementById('ticketInformeFecha');
+    if (informeFecha && ticket.informe_fecha) {
+        informeFecha.textContent = `Generado el ${ticket.informe_fecha}`;
+    }
+
+    const informeTexto = document.getElementById('ticketInformeTexto');
+    if (informeTexto && ticket.informe_cierre) {
+        informeTexto.textContent = ticket.informe_cierre;
+    }
+}
+
+function chatSafeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderSupportMessages(mensajes) {
+    const wrap = document.getElementById('supportChatMessages');
+    const count = document.getElementById('supportChatCount');
+    if (!wrap) return;
+
+    if (count) count.textContent = `${mensajes.length} mensaje(s)`;
+
+    if (!mensajes.length) {
+        wrap.innerHTML = `
+            <div id="supportChatEmpty" class="text-center text-sm text-gray-400 py-8">
+                Aún no hay mensajes. Escribe para iniciar la conversación del ticket.
+            </div>`;
+        return;
+    }
+
+    wrap.innerHTML = mensajes.map((msg) => {
+        const mine = msg.propio;
+        const align = mine ? 'justify-end' : 'justify-start';
+        const bubble = mine ? 'bg-blue-700 text-white' : 'bg-white border border-gray-200 text-gray-700';
+        const meta = mine ? 'text-blue-100' : 'text-gray-400';
+        return `
+            <div class="flex ${align}">
+                <div class="max-w-xl ${bubble} rounded-2xl px-4 py-3 shadow-sm">
+                    <div class="text-xs ${meta} mb-1">${chatSafeHtml(msg.autor)} · ${chatSafeHtml(msg.fecha)}</div>
+                    <div class="text-sm whitespace-pre-line">${chatSafeHtml(msg.mensaje)}</div>
+                </div>
+            </div>`;
+    }).join('');
+    wrap.scrollTop = wrap.scrollHeight;
+}
+
+async function actualizarSupportChat() {
+    if (document.hidden) return;
+
+    try {
+        const res = await fetch('{{ url_for("api_ticket_mensajes", ticket_id=ticket.id) }}', {
+            headers: { 'X-Requested-With': 'fetch' }
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const snapshot = JSON.stringify(data);
+        if (snapshot === supportChatSnapshot) return;
+
+        supportChatSnapshot = snapshot;
+        renderSupportMessages(data.mensajes);
+    } catch {
+        // Conserva los mensajes visibles si falla la conexion.
+    }
+}
+
+const supportChatForm = document.getElementById('supportChatForm');
+if (supportChatForm) {
+    supportChatForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = document.getElementById('supportChatInput');
+        const button = document.getElementById('supportChatSend');
+        const mensaje = input.value.trim();
+        if (!mensaje) return;
+
+        input.value = '';
+        button.disabled = true;
+        try {
+            const res = await fetch('{{ url_for("api_ticket_mensajes", ticket_id=ticket.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'fetch'
+                },
+                body: JSON.stringify({ mensaje })
+            });
+            if (res.ok) {
+                supportChatSnapshot = '';
+                await actualizarSupportChat();
+            }
+        } finally {
+            button.disabled = false;
+            input.focus();
+        }
+    });
 }
 
 async function actualizarResumenTicket() {
@@ -459,7 +648,10 @@ ticketResumenSnapshot = JSON.stringify({
 });
 
 actualizarResumenTicket();
+actualizarSupportChat();
 setInterval(actualizarResumenTicket, 5000);
+setInterval(actualizarSupportChat, 3000);
 document.addEventListener('visibilitychange', actualizarResumenTicket);
+document.addEventListener('visibilitychange', actualizarSupportChat);
 </script>
 {% endblock %}
