@@ -2,6 +2,8 @@ import os
 import sys
 import sqlite3
 import json
+import smtplib
+from email.message import EmailMessage
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
@@ -74,6 +76,7 @@ app.config['MAIL_USE_SSL']        = _env_bool('MAIL_USE_SSL', False)
 app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD', '').replace(' ', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME']
+app.config['MAIL_TIMEOUT']        = int(os.environ.get('MAIL_TIMEOUT', 10))
 app.config['RESEND_API_KEY']      = os.environ.get('RESEND_API_KEY')
 app.config['RESEND_FROM']         = os.environ.get('RESEND_FROM', 'TicketIA Bellavista <onboarding@resend.dev>')
 
@@ -154,11 +157,30 @@ def _mail_sender():
     return app.config['MAIL_USERNAME'] or app.config['MAIL_DEFAULT_SENDER']
 
 
+def _send_smtp_email(subject, recipient, html):
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = _mail_sender()
+    msg['To'] = recipient
+    msg.set_content('Abre este correo en un cliente compatible con HTML.')
+    msg.add_alternative(html, subtype='html')
+
+    timeout = app.config['MAIL_TIMEOUT']
+    if app.config['MAIL_USE_SSL']:
+        host = smtplib.SMTP_SSL(app.config['MAIL_SERVER'], app.config['MAIL_PORT'], timeout=timeout)
+    else:
+        host = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'], timeout=timeout)
+
+    with host:
+        if app.config['MAIL_USE_TLS'] and not app.config['MAIL_USE_SSL']:
+            host.starttls()
+        host.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        host.send_message(msg)
+
+
 def _send_email(subject, recipient, html):
     if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
-        msg = Message(subject, sender=_mail_sender(), recipients=[recipient])
-        msg.html = html
-        mail.send(msg)
+        _send_smtp_email(subject, recipient, html)
         return
 
     if app.config['RESEND_API_KEY']:
