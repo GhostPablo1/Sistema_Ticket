@@ -78,8 +78,12 @@ app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD', '').replace(' ', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME']
 app.config['MAIL_TIMEOUT']        = int(os.environ.get('MAIL_TIMEOUT', 10))
+app.config['MAIL_PROVIDER']       = os.environ.get('MAIL_PROVIDER', '').strip().lower()
 app.config['RESEND_API_KEY']      = os.environ.get('RESEND_API_KEY')
 app.config['RESEND_FROM']         = os.environ.get('RESEND_FROM', 'TicketIA Bellavista <onboarding@resend.dev>')
+app.config['BREVO_API_KEY']       = os.environ.get('BREVO_API_KEY')
+app.config['BREVO_FROM_EMAIL']    = os.environ.get('BREVO_FROM_EMAIL') or app.config['MAIL_USERNAME']
+app.config['BREVO_FROM_NAME']     = os.environ.get('BREVO_FROM_NAME', 'TicketIA Bellavista')
 
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -155,7 +159,7 @@ with app.app_context():
 # HELPERS DE CORREO
 # ============================================================
 def _mail_sender():
-    return app.config['MAIL_USERNAME'] or app.config['MAIL_DEFAULT_SENDER']
+    return app.config['MAIL_DEFAULT_SENDER'] or app.config['MAIL_USERNAME']
 
 
 def _send_smtp_email(subject, recipient, html):
@@ -201,42 +205,107 @@ def _log_mail_error(action, error):
     traceback.print_exc(file=sys.stderr)
 
 
+def _send_resend_email(subject, recipient, html):
+    payload = json.dumps({
+        'from': app.config['RESEND_FROM'],
+        'to': [recipient],
+        'subject': subject,
+        'html': html,
+    }).encode('utf-8')
+    req = urlrequest.Request(
+        'https://api.resend.com/emails',
+        data=payload,
+        headers={
+            'Authorization': f"Bearer {app.config['RESEND_API_KEY']}",
+            'Content-Type': 'application/json',
+            'User-Agent': 'TicketIA/1.0',
+        },
+        method='POST',
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=15) as response:
+            if response.status >= 400:
+                raise RuntimeError(f'Resend error HTTP {response.status}')
+    except HTTPError as e:
+        detail = e.read().decode('utf-8', errors='replace')
+        raise RuntimeError(f'Resend error HTTP {e.code}: {detail}') from e
+    except URLError as e:
+        raise RuntimeError(f'Resend connection error: {e.reason}') from e
+
+
+def _send_brevo_email(subject, recipient, html):
+    if not app.config['BREVO_FROM_EMAIL']:
+        raise RuntimeError('Falta BREVO_FROM_EMAIL o MAIL_USERNAME para enviar con Brevo')
+
+    payload = json.dumps({
+        'sender': {
+            'name': app.config['BREVO_FROM_NAME'],
+            'email': app.config['BREVO_FROM_EMAIL'],
+        },
+        'to': [{'email': recipient}],
+        'subject': subject,
+        'htmlContent': html,
+    }).encode('utf-8')
+    req = urlrequest.Request(
+        'https://api.brevo.com/v3/smtp/email',
+        data=payload,
+        headers={
+            'api-key': app.config['BREVO_API_KEY'],
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'TicketIA/1.0',
+        },
+        method='POST',
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=15) as response:
+            if response.status >= 400:
+                raise RuntimeError(f'Brevo error HTTP {response.status}')
+    except HTTPError as e:
+        detail = e.read().decode('utf-8', errors='replace')
+        raise RuntimeError(f'Brevo error HTTP {e.code}: {detail}') from e
+    except URLError as e:
+        raise RuntimeError(f'Brevo connection error: {e.reason}') from e
+
+
 def _send_email(subject, recipient, html):
+    provider = app.config['MAIL_PROVIDER']
+
+    if provider == 'brevo':
+        _send_brevo_email(subject, recipient, html)
+        return
+    if provider == 'resend':
+        _send_resend_email(subject, recipient, html)
+        return
+
+    if os.environ.get('RENDER') and app.config['BREVO_API_KEY']:
+        _send_brevo_email(subject, recipient, html)
+        return
+    if os.environ.get('RENDER') and app.config['RESEND_API_KEY']:
+        _send_resend_email(subject, recipient, html)
+        return
+
     if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
         try:
             _send_smtp_email(subject, recipient, html)
             return
         except Exception as e:
-            if not app.config['RESEND_API_KEY']:
-                raise
-            _log_mail_error('SMTP, intentando Resend', e)
+            if app.config['BREVO_API_KEY']:
+                _log_mail_error('SMTP, intentando Brevo', e)
+                _send_brevo_email(subject, recipient, html)
+                return
+            if app.config['RESEND_API_KEY']:
+                _log_mail_error('SMTP, intentando Resend', e)
+                _send_resend_email(subject, recipient, html)
+                return
+            raise
+
+    if app.config['BREVO_API_KEY']:
+        _send_brevo_email(subject, recipient, html)
+        return
 
     if app.config['RESEND_API_KEY']:
-        payload = json.dumps({
-            'from': app.config['RESEND_FROM'],
-            'to': [recipient],
-            'subject': subject,
-            'html': html,
-        }).encode('utf-8')
-        req = urlrequest.Request(
-            'https://api.resend.com/emails',
-            data=payload,
-            headers={
-                'Authorization': f"Bearer {app.config['RESEND_API_KEY']}",
-                'Content-Type': 'application/json',
-                'User-Agent': 'TicketIA/1.0',
-            },
-            method='POST',
-        )
-        try:
-            with urlrequest.urlopen(req, timeout=15) as response:
-                if response.status >= 400:
-                    raise RuntimeError(f'Resend error HTTP {response.status}')
-        except HTTPError as e:
-            detail = e.read().decode('utf-8', errors='replace')
-            raise RuntimeError(f'Resend error HTTP {e.code}: {detail}') from e
-        except URLError as e:
-            raise RuntimeError(f'Resend connection error: {e.reason}') from e
+        _send_resend_email(subject, recipient, html)
         return
 
     raise RuntimeError('No hay configuracion de correo disponible')
