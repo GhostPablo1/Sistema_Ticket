@@ -13,7 +13,7 @@ from flask_mail import Mail, Message
 from database import db, Usuario, Ticket, MensajeIA
 from ai_assistant import get_ai_response
 from datetime import datetime
-from sqlalchemy import text, func
+from sqlalchemy import inspect, text, func
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from dotenv import load_dotenv
 
@@ -43,20 +43,38 @@ def get_valid_database_path():
     print("ERROR CRÍTICO: No se pudo encontrar una ubicación para la base de datos.", file=sys.stderr)
     sys.exit(1)
 
-import os
 
-# 1. Intentamos obtener la ruta normal
-db_path = get_valid_database_path()
+def _normalize_database_uri(database_url):
+    if database_url.startswith('postgres://'):
+        return 'postgresql+psycopg://' + database_url[len('postgres://'):]
+    if database_url.startswith('postgresql://'):
+        return 'postgresql+psycopg://' + database_url[len('postgresql://'):]
+    return database_url
 
-# 2. 🚨 SALVAVIDAS PARA RENDER: Si detecta que está en Linux/Render, fuerza una ruta relativa
-if os.environ.get('RENDER') or not db_path.startswith(('C:', 'D:')):
-    db_uri = 'sqlite:///test.db'
+
+def _safe_db_uri_for_log(uri):
+    if '://' not in uri or '@' not in uri:
+        return uri
+
+    scheme, rest = uri.split('://', 1)
+    host_part = rest.split('@', 1)[1]
+    return f'{scheme}://***:***@{host_part}'
+
+
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    db_uri = _normalize_database_uri(database_url)
 else:
-    db_uri = 'sqlite:///' + db_path.replace('\\', '/')
+    db_path = get_valid_database_path()
+    if os.environ.get('RENDER') or not db_path.startswith(('C:', 'D:')):
+        db_uri = 'sqlite:///test.db'
+    else:
+        db_uri = 'sqlite:///' + db_path.replace('\\', '/')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-print(f"📁 URI final: {db_uri}", file=sys.stderr)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+print(f"📁 URI final: {_safe_db_uri_for_log(db_uri)}", file=sys.stderr)
 
 db.init_app(app)
 
@@ -105,29 +123,28 @@ def load_user(user_id):
 # ==================== INIT DB ====================
 with app.app_context():
     db.create_all()
+    inspector = inspect(db.engine)
+    usuario_columns = {column['name'] for column in inspector.get_columns('usuarios')}
+    default_true = '1' if db.engine.dialect.name == 'sqlite' else 'TRUE'
+    default_false = '0' if db.engine.dialect.name == 'sqlite' else 'FALSE'
 
     # Migración: columna activo
-    try:
+    if 'activo' not in usuario_columns:
         with db.engine.connect() as conn:
-            conn.execute(text("ALTER TABLE usuarios ADD COLUMN activo BOOLEAN DEFAULT 1"))
+            conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN activo BOOLEAN DEFAULT {default_true}"))
             conn.commit()
-    except Exception:
-        pass
 
     # Migración: columna email_verificado
-    try:
+    if 'email_verificado' not in usuario_columns:
         with db.engine.connect() as conn:
-            conn.execute(text("ALTER TABLE usuarios ADD COLUMN email_verificado BOOLEAN DEFAULT 0"))
+            conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN email_verificado BOOLEAN DEFAULT {default_false}"))
             conn.commit()
-    except Exception:
-        pass
 
     # Los usuarios ya existentes quedan como verificados automáticamente
-    with db.engine.connect() as conn:
-        conn.execute(text(
-            "UPDATE usuarios SET email_verificado = 1 WHERE email_verificado IS NULL OR email_verificado = 0"
-        ))
-        conn.commit()
+    Usuario.query.filter(
+        (Usuario.email_verificado.is_(None)) | (Usuario.email_verificado == False)
+    ).update({Usuario.email_verificado: True}, synchronize_session=False)
+    db.session.commit()
 
     if not Usuario.query.filter_by(email='tecnico@bellavista.gob.pe').first():
         db.session.add(Usuario(

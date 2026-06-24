@@ -7,3 +7,4 @@ openai
 python-dotenv
 werkzeug
 gunicorn
+psycopg[binary]
