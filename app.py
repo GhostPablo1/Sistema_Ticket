@@ -569,6 +569,8 @@ def _usuario_json(usuario):
         'rol_label': rol_label,
         'area': usuario.area or '',
         'fecha_registro': usuario.fecha_registro.strftime('%d/%m/%Y') if usuario.fecha_registro else '',
+        'make_tech_url': url_for('admin_hacer_tecnico', user_id=usuario.id),
+        'remove_tech_url': url_for('admin_quitar_tecnico', user_id=usuario.id),
         'delete_url': url_for('admin_eliminar_usuario', user_id=usuario.id),
     }
 
@@ -1148,23 +1150,67 @@ def api_admin_usuarios():
 def admin_crear_usuario():
     if not _is_admin():
         return redirect(url_for('dashboard_usuario'))
-    nombre   = request.form['nombre'].strip()
-    email    = request.form['email'].strip().lower()
-    password = request.form['password']
-    rol      = request.form.get('rol', USER_ROLE)
-    area     = request.form.get('area', '').strip()
+    flash('Los usuarios deben registrarse desde el formulario publico. Luego puedes usar "Hacer tecnico".', 'warning')
+    return redirect(url_for('admin_usuarios'))
 
-    if rol not in [USER_ROLE, TECH_ROLE, ADMIN_ROLE]:
-        rol = USER_ROLE
 
-    if Usuario.query.filter_by(email=email).first():
-        flash('Ya existe un usuario con ese correo electrónico.', 'danger')
+@app.route('/admin/usuario/<int:user_id>/hacer-tecnico', methods=['POST'])
+@login_required
+def admin_hacer_tecnico(user_id):
+    if not _is_admin():
+        return redirect(url_for('dashboard_usuario'))
+
+    usuario = Usuario.query.get_or_404(user_id)
+    if usuario.rol == ADMIN_ROLE:
+        flash('No se puede cambiar el rol de un administrador desde esta accion.', 'danger')
         return redirect(url_for('admin_usuarios'))
 
-    db.session.add(Usuario(nombre=nombre, email=email, password=password,
-                           rol=rol, area=area, activo=True, email_verificado=True))
+    usuario.rol = TECH_ROLE
+    usuario.activo = True
+    usuario.email_verificado = True
+    _notify_user(
+        usuario.id,
+        'Ahora eres tecnico de soporte',
+        'El administrador te habilito como tecnico. Ya puedes atender tickets asignados.',
+    )
     db.session.commit()
-    flash(f'Usuario "{nombre}" creado exitosamente.', 'success')
+    flash(f'{usuario.nombre} ahora es tecnico de soporte.', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+
+@app.route('/admin/usuario/<int:user_id>/quitar-tecnico', methods=['POST'])
+@login_required
+def admin_quitar_tecnico(user_id):
+    if not _is_admin():
+        return redirect(url_for('dashboard_usuario'))
+
+    usuario = Usuario.query.get_or_404(user_id)
+    if usuario.rol != TECH_ROLE:
+        flash('Ese usuario no es tecnico.', 'warning')
+        return redirect(url_for('admin_usuarios'))
+
+    tickets_abiertos = Ticket.query.filter(
+        Ticket.tecnico_id == usuario.id,
+        Ticket.estado.in_(['Pendiente', 'En Proceso'])
+    ).all()
+    for ticket in tickets_abiertos:
+        ticket.tecnico_id = None
+        ticket.estado = 'Pendiente'
+        _notify_user(
+            ticket.usuario_id,
+            'Ticket pendiente de reasignacion',
+            f'Tu ticket #{ticket.id} quedo pendiente de un nuevo tecnico.',
+            ticket.id,
+        )
+
+    usuario.rol = USER_ROLE
+    _notify_user(
+        usuario.id,
+        'Rol de tecnico retirado',
+        'El administrador retiro tu rol de tecnico de soporte.',
+    )
+    db.session.commit()
+    flash(f'{usuario.nombre} volvio a rol usuario.', 'success')
     return redirect(url_for('admin_usuarios'))
 
 

@@ -14,12 +14,25 @@
             <span class="text-gray-800 font-medium">Usuarios</span>
         </div>
         <h1 class="text-2xl font-bold text-gray-800">Gestión de Usuarios</h1>
-        <p class="text-gray-500 text-sm">Administra las cuentas del sistema</p>
+        <p class="text-gray-500 text-sm">Los usuarios se registran solos; aquí apruebas quién será técnico de soporte.</p>
     </div>
-    <button onclick="document.getElementById('modalCrear').classList.remove('hidden')"
-            class="inline-flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition">
-        <i class="fas fa-user-plus"></i> Crear Usuario
-    </button>
+    <a href="{{ url_for('register') }}"
+       class="inline-flex items-center gap-2 bg-white border border-blue-200 hover:border-blue-400 text-blue-800 font-semibold px-5 py-2.5 rounded-xl shadow-sm transition">
+        <i class="fas fa-link"></i> Formulario de registro
+    </a>
+</div>
+
+<div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-6 flex items-start gap-3">
+    <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-info-circle"></i>
+    </div>
+    <div>
+        <div class="font-semibold text-blue-900 text-sm">Flujo recomendado</div>
+        <p class="text-blue-800 text-sm mt-1">
+            La persona se registra como usuario normal. Luego el administrador usa <strong>Hacer técnico</strong>
+            para habilitarla como soporte y recién ahí podrá ver tickets asignados.
+        </p>
+    </div>
 </div>
 
 <!-- Stats rápidas -->
@@ -107,13 +120,31 @@
                     </td>
                     <td class="px-4 py-3 text-center">
                         {% if u.id != current_user.id %}
-                        <form method="POST" action="{{ url_for('admin_eliminar_usuario', user_id=u.id) }}"
-                              onsubmit="return confirm('¿Eliminar al usuario {{ u.nombre }}? Esta acción no se puede deshacer.')">
-                            <button type="submit"
-                                    class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">
-                                <i class="fas fa-trash-alt"></i> Eliminar
-                            </button>
-                        </form>
+                        <div class="flex justify-center gap-2 flex-wrap">
+                            {% if u.rol == 'usuario' %}
+                            <form method="POST" action="{{ url_for('admin_hacer_tecnico', user_id=u.id) }}">
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                                    <i class="fas fa-headset"></i> Hacer técnico
+                                </button>
+                            </form>
+                            {% elif u.rol == 'tecnico' %}
+                            <form method="POST" action="{{ url_for('admin_quitar_tecnico', user_id=u.id) }}"
+                                  onsubmit="return confirm('¿Quitar rol técnico a {{ u.nombre }}? Sus tickets abiertos quedarán pendientes de reasignación.')">
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                                    <i class="fas fa-user"></i> Quitar técnico
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('admin_eliminar_usuario', user_id=u.id) }}"
+                                  onsubmit="return confirm('¿Eliminar al usuario {{ u.nombre }}? Esta acción no se puede deshacer.')">
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                                    <i class="fas fa-trash-alt"></i> Eliminar
+                                </button>
+                            </form>
+                        </div>
                         {% else %}
                         <span class="text-xs text-gray-400 italic">Cuenta propia</span>
                         {% endif %}
@@ -132,90 +163,10 @@
     </div>
 </div>
 
-<!-- ===== MODAL CREAR USUARIO ===== -->
-<div id="modalCrear" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onclick="event.stopPropagation()">
-        <!-- Header modal -->
-        <div class="bg-gradient-to-r from-blue-900 to-blue-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-            <h3 class="text-white font-bold text-lg flex items-center gap-2">
-                <i class="fas fa-user-plus text-yellow-300"></i> Crear Nuevo Usuario
-            </h3>
-            <button onclick="document.getElementById('modalCrear').classList.add('hidden')"
-                    class="text-white/70 hover:text-white text-xl leading-none transition">&times;</button>
-        </div>
-
-        <!-- Formulario -->
-        <form method="POST" action="{{ url_for('admin_crear_usuario') }}" class="p-6 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-                <div class="col-span-2">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Nombre Completo *</label>
-                    <input type="text" name="nombre" required
-                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                           placeholder="Ej: María Fernández">
-                </div>
-                <div class="col-span-2">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Correo Electrónico *</label>
-                    <input type="email" name="email" required
-                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                           placeholder="correo@bellavista.gob.pe">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Área / Dpto.</label>
-                    <select name="area"
-                            class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">— Sin área —</option>
-                        <option value="Administración">Administración</option>
-                        <option value="Atención al Ciudadano">Atención al Ciudadano</option>
-                        <option value="Contabilidad">Contabilidad</option>
-                        <option value="Gerencia">Gerencia</option>
-                        <option value="Informática">Informática</option>
-                        <option value="Logística">Logística</option>
-                        <option value="Recursos Humanos">Recursos Humanos</option>
-                        <option value="Secretaría General">Secretaría General</option>
-                        <option value="Tesorería">Tesorería</option>
-                        <option value="Otro">Otro</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Rol *</label>
-                    <select name="rol"
-                            class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="admin">Administrador</option>
-                        <option value="tecnico">Técnico / Soporte</option>
-                        <option value="usuario" selected>Usuario</option>
-                    </select>
-                </div>
-                <div class="col-span-2">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Contraseña *</label>
-                    <input type="password" name="password" required minlength="6"
-                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                           placeholder="Mínimo 6 caracteres">
-                </div>
-            </div>
-
-            <div class="flex gap-3 pt-2">
-                <button type="submit"
-                        class="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2">
-                    <i class="fas fa-user-plus"></i> Crear Usuario
-                </button>
-                <button type="button" onclick="document.getElementById('modalCrear').classList.add('hidden')"
-                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition">
-                    Cancelar
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// Cerrar modal al hacer clic fuera
-document.getElementById('modalCrear').addEventListener('click', function(e) {
-    if (e.target === this) this.classList.add('hidden');
-});
-
 const CURRENT_ADMIN_ID = {{ current_user.id }};
 let adminUsuariosSnapshot = '';
 
@@ -237,15 +188,37 @@ function renderUsuarioRow(usuario) {
         : (usuario.rol === 'tecnico'
             ? '<span class="badge" style="background:#fef3c7;color:#92400e;"><i class="fas fa-headset mr-1"></i>Técnico</span>'
             : '<span class="badge badge-proceso"><i class="fas fa-user mr-1"></i>Usuario</span>');
-    const acciones = usuario.id === CURRENT_ADMIN_ID
-        ? '<span class="text-xs text-gray-400 italic">Cuenta propia</span>'
-        : `<form method="POST" action="${safeHtml(usuario.delete_url)}"
+    let acciones = '<span class="text-xs text-gray-400 italic">Cuenta propia</span>';
+    if (usuario.id !== CURRENT_ADMIN_ID) {
+        const botones = [];
+        if (usuario.rol === 'usuario') {
+            botones.push(`
+                <form method="POST" action="${safeHtml(usuario.make_tech_url)}">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                        <i class="fas fa-headset"></i> Hacer técnico
+                    </button>
+                </form>`);
+        } else if (usuario.rol === 'tecnico') {
+            botones.push(`
+                <form method="POST" action="${safeHtml(usuario.remove_tech_url)}"
+                      onsubmit="return confirm('Quitar rol tecnico a ${safeHtml(usuario.nombre)}? Sus tickets abiertos quedaran pendientes de reasignacion.')">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                        <i class="fas fa-user"></i> Quitar técnico
+                    </button>
+                </form>`);
+        }
+        botones.push(`
+            <form method="POST" action="${safeHtml(usuario.delete_url)}"
                   onsubmit="return confirm('Eliminar al usuario ${safeHtml(usuario.nombre)}? Esta accion no se puede deshacer.')">
                 <button type="submit"
                         class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">
                     <i class="fas fa-trash-alt"></i> Eliminar
                 </button>
-            </form>`;
+            </form>`);
+        acciones = `<div class="flex justify-center gap-2 flex-wrap">${botones.join('')}</div>`;
+    }
 
     return `
         <tr class="hover:bg-gray-50 transition">
