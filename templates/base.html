@@ -233,7 +233,7 @@ function renderNotificaciones(data) {
 async function cargarNotificaciones() {
     if (document.hidden) return;
     try {
-        const res = await fetch('{{ url_for("api_notificaciones") }}', {
+        const res = await fetch('{{ url_for("tickets.api_notificaciones") }}', {
             headers: { 'X-Requested-With': 'fetch' }
         });
         if (!res.ok) return;
@@ -249,7 +249,7 @@ async function cargarNotificaciones() {
 
 async function marcarNotificacionesLeidas() {
     try {
-        await fetch('{{ url_for("api_notificaciones_marcar_leidas") }}', {
+        await fetch('{{ url_for("tickets.api_notificaciones_marcar_leidas") }}', {
             method: 'POST',
             headers: { 'X-Requested-With': 'fetch' }
         });

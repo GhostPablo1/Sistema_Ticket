@@ -276,7 +276,7 @@ async function actualizarUsuariosAdmin() {
     if (document.hidden) return;
 
     try {
-        const res = await fetch('{{ url_for("api_admin_usuarios") }}', {
+        const res = await fetch('{{ url_for("admin.api_usuarios") }}', {
             headers: { 'X-Requested-With': 'fetch' }
         });
         if (!res.ok) return;

@@ -228,9 +228,12 @@ def estadisticas():
     if not _require_admin():
         return redirect(url_for('tickets.dashboard_usuario'))
 
-    por_categoria = db.session.query(Ticket.categoria, func.count(Ticket.id)).group_by(Ticket.categoria).all()
-    por_estado    = db.session.query(Ticket.estado,    func.count(Ticket.id)).group_by(Ticket.estado).all()
-    por_prioridad = db.session.query(Ticket.prioridad, func.count(Ticket.id)).group_by(Ticket.prioridad).all()
+    por_categoria = [(cat or 'Sin categoría', cnt) for cat, cnt in
+                     db.session.query(Ticket.categoria, func.count(Ticket.id)).group_by(Ticket.categoria).all()]
+    por_estado    = [(est or 'Sin estado', cnt) for est, cnt in
+                     db.session.query(Ticket.estado, func.count(Ticket.id)).group_by(Ticket.estado).all()]
+    por_prioridad = [(pri or 'Sin prioridad', cnt) for pri, cnt in
+                     db.session.query(Ticket.prioridad, func.count(Ticket.id)).group_by(Ticket.prioridad).all()]
     total         = Ticket.query.count()
 
     return render_template(
