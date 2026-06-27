@@ -152,28 +152,63 @@
 
 <!-- Tabla de tickets recientes -->
 <div id="tickets" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <i class="fas fa-ticket-alt text-blue-600"></i> {{ 'Todos los Tickets' if current_user.rol == 'admin' else 'Tickets Asignados' }}
-        </h2>
-        <!-- Filtro por estado -->
-        <div class="flex gap-2 flex-wrap">
-            <button onclick="filtrarTabla('todos')" id="btn-todos"
-                    class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-blue-800 text-white border-blue-800">
-                Todos (<span id="filter-total">{{ todos_tickets|length }}</span>)
-            </button>
-            <button onclick="filtrarTabla('Pendiente')" id="btn-pendiente"
-                    class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-yellow-400">
-                Pendientes (<span id="filter-pendientes">{{ tickets_pendientes|length }}</span>)
-            </button>
-            <button onclick="filtrarTabla('En Proceso')" id="btn-proceso"
-                    class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-blue-400">
-                En Proceso (<span id="filter-en-proceso">{{ tickets_en_proceso|length }}</span>)
-            </button>
-            <button onclick="filtrarTabla('Resuelto')" id="btn-resuelto"
-                    class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-green-400">
-                Resueltos (<span id="filter-resueltos">{{ tickets_resueltos|length }}</span>)
-            </button>
+    <div class="px-6 py-4 border-b border-gray-100 flex flex-col gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-ticket-alt text-blue-600"></i> {{ 'Todos los Tickets' if current_user.rol == 'admin' else 'Tickets Asignados' }}
+            </h2>
+            <!-- Barra de búsqueda -->
+            <div class="relative w-full sm:w-72">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input id="searchInput" type="text" placeholder="Buscar por título, usuario, categoría..."
+                       class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+        <!-- Filtros por estado + avanzados -->
+        <div class="flex flex-wrap gap-2 items-center">
+            <div class="flex gap-1 flex-wrap">
+                <button onclick="setFiltroEstado('todos')" id="btn-todos"
+                        class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-blue-800 text-white border-blue-800">
+                    Todos (<span id="filter-total">{{ todos_tickets|length }}</span>)
+                </button>
+                <button onclick="setFiltroEstado('Pendiente')" id="btn-pendiente"
+                        class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-yellow-400">
+                    Pendientes (<span id="filter-pendientes">{{ tickets_pendientes|length }}</span>)
+                </button>
+                <button onclick="setFiltroEstado('En Proceso')" id="btn-proceso"
+                        class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-blue-400">
+                    En Proceso (<span id="filter-en-proceso">{{ tickets_en_proceso|length }}</span>)
+                </button>
+                <button onclick="setFiltroEstado('Resuelto')" id="btn-resuelto"
+                        class="filter-btn text-xs px-3 py-1.5 rounded-lg border font-medium transition bg-white text-gray-700 border-gray-200 hover:border-green-400">
+                    Resueltos (<span id="filter-resueltos">{{ tickets_resueltos|length }}</span>)
+                </button>
+            </div>
+            <div class="flex gap-2 ml-auto">
+                <select id="filtroPrioridad" onchange="aplicarFiltros()"
+                        class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="">Prioridad</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Media">Media</option>
+                    <option value="Baja">Baja</option>
+                </select>
+                <select id="filtroCategoria" onchange="aplicarFiltros()"
+                        class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="">Categoría</option>
+                    <option value="impresora">Impresora</option>
+                    <option value="internet">Internet</option>
+                    <option value="computadora">Computadora</option>
+                    <option value="software">Software</option>
+                    <option value="otro">Otro</option>
+                </select>
+                <button onclick="limpiarFiltros()" id="btnLimpiarFiltros" class="hidden text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
+                    <i class="fas fa-times mr-1"></i>Limpiar
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center justify-between text-xs text-gray-500">
+            <span id="resultadosInfo"></span>
+            <div id="paginacionTop" class="flex items-center gap-1"></div>
         </div>
     </div>
 
@@ -295,169 +330,260 @@
 
 {% block extra_scripts %}
 <script>
-let filtroActual = 'todos';
-let ticketsSnapshot = '';
+// ── Estado global ──────────────────────────────────────────────
 const IS_ADMIN = {{ 'true' if current_user.rol == 'admin' else 'false' }};
-const TECNICOS = {{ tecnicos | map(attribute='id') | list | tojson }};
+const IS_TECH  = {{ 'true' if current_user.rol == 'tecnico' else 'false' }};
+const TECNICOS        = {{ tecnicos | map(attribute='id')     | list | tojson }};
 const TECNICOS_NOMBRES = {{ tecnicos | map(attribute='nombre') | list | tojson }};
 
-function filtrarTabla(estado) {
-    filtroActual = estado;
-    const rows = document.querySelectorAll('.ticket-row');
-    rows.forEach(row => {
-        if (estado === 'todos' || row.dataset.estado === estado) {
-            row.style.display = '';
+let allTickets      = [];
+let ticketsSnapshot = '';
+let filtroEstado    = 'todos';
+let paginaActual    = 1;
+const POR_PAGINA    = 15;
+
+// ── Helpers HTML seguro ────────────────────────────────────────
+function safeHtml(v) {
+    return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function shortText(v, n) { const s = String(v??''); return s.length>n ? s.slice(0,n)+'…' : s; }
+
+// ── Iconos y badges ────────────────────────────────────────────
+const CAT_ICON = { impresora:'fa-print', internet:'fa-wifi', computadora:'fa-desktop', software:'fa-code' };
+function categoriaIcon(c) { return CAT_ICON[c] || 'fa-tools'; }
+function categoriaTexto(c) { return c ? c.charAt(0).toUpperCase()+c.slice(1) : '—'; }
+function estadoBadge(e) {
+    if (e==='Pendiente')  return 'badge-pendiente';
+    if (e==='En Proceso') return 'badge-proceso';
+    if (e==='Resuelto')   return 'badge-resuelto';
+    return 'badge-cerrado';
+}
+function prioridadBadge(p) {
+    if (p==='Alta')  return 'badge-alta';
+    if (p==='Media') return 'badge-media';
+    return 'badge-baja';
+}
+
+// ── Render celda técnico ───────────────────────────────────────
+function renderTecnicoCell(ticket) {
+    if (IS_ADMIN) {
+        const opts = ['<option value="">Sin asignar</option>'].concat(
+            TECNICOS.map((id,i) => {
+                const sel = Number(ticket.tecnico_id)===Number(id) ? 'selected' : '';
+                return `<option value="${safeHtml(id)}" ${sel}>${safeHtml(TECNICOS_NOMBRES[i])}</option>`;
+            })
+        ).join('');
+        return `<form method="POST" action="${safeHtml(ticket.assign_url)}">
+            <select name="tecnico_id" onchange="this.form.submit()"
+                class="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                ${opts}
+            </select></form>`;
+    }
+    if (IS_TECH && !ticket.tecnico_id) {
+        return `<button onclick="autoAsignar(${ticket.id}, this)"
+            class="text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-2 py-1 rounded-lg font-medium transition">
+            <i class="fas fa-hand-pointer mr-1"></i>Tomar ticket</button>`;
+    }
+    if (ticket.tecnico_nombre) {
+        return `<div class="font-medium text-gray-700">${safeHtml(ticket.tecnico_nombre)}</div>
+                <div class="text-gray-400 text-xs">${safeHtml(ticket.tecnico_area||'Soporte')}</div>`;
+    }
+    return '<span class="text-yellow-700 bg-yellow-50 px-2 py-1 rounded-lg text-xs font-semibold">Sin asignar</span>';
+}
+
+// ── Auto-asignación técnico ────────────────────────────────────
+async function autoAsignar(ticketId, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Asignando…';
+    try {
+        const res = await fetch(`/tecnico/ticket/${ticketId}/auto-asignar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }
+        });
+        const data = await res.json();
+        if (res.ok) {
+            ticketsSnapshot = '';
+            await actualizarTicketsTecnico();
         } else {
-            row.style.display = 'none';
+            alert(data.error || 'No se pudo asignar el ticket.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-hand-pointer mr-1"></i>Tomar ticket';
         }
+    } catch {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-hand-pointer mr-1"></i>Tomar ticket';
+    }
+}
+
+// ── Render fila ────────────────────────────────────────────────
+function renderTicketRow(ticket) {
+    const acciones = IS_ADMIN
+        ? `<div class="flex justify-center gap-2 flex-wrap">
+            <a href="${safeHtml(ticket.url)}" class="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                <i class="fas fa-eye"></i> Ver</a>
+            <form method="POST" action="${safeHtml(ticket.delete_url)}"
+                  onsubmit="return confirm('¿Eliminar el ticket #${safeHtml(ticket.id)}?')">
+                <button type="submit" class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fas fa-trash"></i> Borrar</button>
+            </form></div>`
+        : `<a href="${safeHtml(ticket.url)}" class="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+               <i class="fas fa-eye"></i> Ver</a>`;
+
+    return `<tr class="hover:bg-gray-50 transition ticket-row"
+               data-estado="${safeHtml(ticket.estado)}"
+               data-prioridad="${safeHtml(ticket.prioridad)}"
+               data-categoria="${safeHtml(ticket.categoria)}"
+               data-search="${safeHtml((ticket.titulo+' '+ticket.creador_nombre+' '+ticket.categoria).toLowerCase())}">
+        <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(ticket.id)}</td>
+        <td class="px-4 py-3">
+            <div class="font-medium text-gray-800 text-sm">${safeHtml(ticket.titulo)}</div>
+            <div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(ticket.descripcion,50))}</div>
+        </td>
+        <td class="px-4 py-3 hidden md:table-cell">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-bold flex-shrink-0">
+                    ${safeHtml(ticket.creador_inicial)}</div>
+                <div>
+                    <div class="text-sm text-gray-700 font-medium">${safeHtml(ticket.creador_nombre)}</div>
+                    <div class="text-gray-400 text-xs">${safeHtml(ticket.creador_area)}</div>
+                </div>
+            </div>
+        </td>
+        <td class="px-4 py-3 hidden lg:table-cell text-sm text-gray-600">${renderTecnicoCell(ticket)}</td>
+        <td class="px-4 py-3 hidden md:table-cell text-sm text-gray-600">
+            <i class="fas ${categoriaIcon(ticket.categoria)} text-gray-400 mr-1"></i>
+            ${safeHtml(categoriaTexto(ticket.categoria))}
+        </td>
+        <td class="px-4 py-3"><span class="badge ${estadoBadge(ticket.estado)}">${safeHtml(ticket.estado)}</span></td>
+        <td class="px-4 py-3 hidden sm:table-cell"><span class="badge ${prioridadBadge(ticket.prioridad)}">${safeHtml(ticket.prioridad)}</span></td>
+        <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">${safeHtml(ticket.fecha)}</td>
+        <td class="px-4 py-3 text-center">${acciones}</td>
+    </tr>`;
+}
+
+// ── Filtrado ───────────────────────────────────────────────────
+function getFilteredTickets() {
+    const search   = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+    const prioridad = document.getElementById('filtroPrioridad')?.value || '';
+    const categoria = document.getElementById('filtroCategoria')?.value || '';
+
+    return allTickets.filter(t => {
+        if (filtroEstado !== 'todos' && t.estado !== filtroEstado) return false;
+        if (prioridad && t.prioridad !== prioridad) return false;
+        if (categoria && t.categoria !== categoria) return false;
+        if (search) {
+            const hay = (t.titulo+' '+t.creador_nombre+' '+(t.categoria||'')).toLowerCase();
+            if (!hay.includes(search)) return false;
+        }
+        return true;
     });
-    // Update button styles
+}
+
+function hayFiltrosActivos() {
+    return filtroEstado !== 'todos'
+        || (document.getElementById('filtroPrioridad')?.value || '') !== ''
+        || (document.getElementById('filtroCategoria')?.value || '') !== ''
+        || (document.getElementById('searchInput')?.value || '').trim() !== '';
+}
+
+// ── Paginación ─────────────────────────────────────────────────
+function renderPaginacion(total, containerId) {
+    const cont = document.getElementById(containerId);
+    if (!cont) return;
+    const totalPages = Math.ceil(total / POR_PAGINA);
+    if (totalPages <= 1) { cont.innerHTML = ''; return; }
+
+    let btns = '';
+    btns += `<button onclick="irPagina(${paginaActual-1})" ${paginaActual===1?'disabled':''} class="px-2 py-1 rounded border text-xs ${paginaActual===1?'text-gray-300 border-gray-100':'hover:bg-gray-50 border-gray-200'}">‹</button>`;
+
+    const start = Math.max(1, paginaActual-2);
+    const end   = Math.min(totalPages, paginaActual+2);
+    if (start > 1) btns += `<button onclick="irPagina(1)" class="px-2 py-1 rounded border border-gray-200 text-xs hover:bg-gray-50">1</button>`;
+    if (start > 2) btns += `<span class="px-1 text-gray-400 text-xs">…</span>`;
+    for (let p = start; p <= end; p++) {
+        const active = p === paginaActual ? 'bg-blue-800 text-white border-blue-800' : 'hover:bg-gray-50 border-gray-200 text-gray-700';
+        btns += `<button onclick="irPagina(${p})" class="px-2 py-1 rounded border text-xs ${active}">${p}</button>`;
+    }
+    if (end < totalPages-1) btns += `<span class="px-1 text-gray-400 text-xs">…</span>`;
+    if (end < totalPages)   btns += `<button onclick="irPagina(${totalPages})" class="px-2 py-1 rounded border border-gray-200 text-xs hover:bg-gray-50">${totalPages}</button>`;
+    btns += `<button onclick="irPagina(${paginaActual+1})" ${paginaActual===totalPages?'disabled':''} class="px-2 py-1 rounded border text-xs ${paginaActual===totalPages?'text-gray-300 border-gray-100':'hover:bg-gray-50 border-gray-200'}">›</button>`;
+
+    cont.innerHTML = btns;
+}
+
+function irPagina(p) {
+    const filtered = getFilteredTickets();
+    const totalPages = Math.ceil(filtered.length / POR_PAGINA);
+    paginaActual = Math.max(1, Math.min(p, totalPages || 1));
+    renderTabla();
+}
+
+// ── Render tabla ───────────────────────────────────────────────
+function renderTabla() {
+    const filtered  = getFilteredTickets();
+    const total     = filtered.length;
+    const inicio    = (paginaActual - 1) * POR_PAGINA;
+    const pagina    = filtered.slice(inicio, inicio + POR_PAGINA);
+
+    const body      = document.getElementById('ticketsBody');
+    const tableWrap = document.getElementById('ticketsTableWrap');
+    const empty     = document.getElementById('ticketsEmpty');
+    const info      = document.getElementById('resultadosInfo');
+
+    if (!body) return;
+
+    body.innerHTML = pagina.map(renderTicketRow).join('');
+    tableWrap?.classList.toggle('hidden', total === 0);
+    empty?.classList.toggle('hidden', total > 0);
+
+    if (info) {
+        if (total === allTickets.length) {
+            info.textContent = `${total} ticket${total!==1?'s':''}`;
+        } else {
+            info.textContent = `${total} resultado${total!==1?'s':''} de ${allTickets.length}`;
+        }
+    }
+
+    // Botón limpiar filtros
+    const btnLimpiar = document.getElementById('btnLimpiarFiltros');
+    if (btnLimpiar) btnLimpiar.classList.toggle('hidden', !hayFiltrosActivos());
+
+    renderPaginacion(total, 'paginacionTop');
+}
+
+// ── Actualizar botones de filtro de estado ─────────────────────
+function setFiltroEstado(estado) {
+    filtroEstado  = estado;
+    paginaActual  = 1;
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('bg-blue-800', 'text-white', 'border-blue-800');
         btn.classList.add('bg-white', 'text-gray-700', 'border-gray-200');
     });
-    const idMap = { 'todos': 'btn-todos', 'Pendiente': 'btn-pendiente', 'En Proceso': 'btn-proceso', 'Resuelto': 'btn-resuelto' };
-    const activeBtn = document.getElementById(idMap[estado] || 'btn-todos');
-    if (activeBtn) {
-        activeBtn.classList.add('bg-blue-800', 'text-white', 'border-blue-800');
-        activeBtn.classList.remove('bg-white', 'text-gray-700', 'border-gray-200');
+    const map = { todos:'btn-todos', Pendiente:'btn-pendiente', 'En Proceso':'btn-proceso', Resuelto:'btn-resuelto' };
+    const active = document.getElementById(map[estado] || 'btn-todos');
+    if (active) {
+        active.classList.add('bg-blue-800', 'text-white', 'border-blue-800');
+        active.classList.remove('bg-white', 'text-gray-700', 'border-gray-200');
     }
+    renderTabla();
 }
 
-function safeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+function aplicarFiltros() { paginaActual = 1; renderTabla(); }
+
+function limpiarFiltros() {
+    filtroEstado = 'todos';
+    paginaActual = 1;
+    const si = document.getElementById('searchInput');
+    const fp = document.getElementById('filtroPrioridad');
+    const fc = document.getElementById('filtroCategoria');
+    if (si) si.value = '';
+    if (fp) fp.value = '';
+    if (fc) fc.value = '';
+    setFiltroEstado('todos');
 }
 
-function shortText(value, maxLength) {
-    const text = String(value ?? '');
-    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-}
-
-function categoriaIcon(categoria) {
-    const iconos = {
-        impresora: 'fa-print',
-        internet: 'fa-wifi',
-        computadora: 'fa-desktop',
-        software: 'fa-code',
-    };
-    return iconos[categoria] || 'fa-tools';
-}
-
-function categoriaTexto(categoria) {
-    if (!categoria) return '---';
-    return categoria.charAt(0).toUpperCase() + categoria.slice(1);
-}
-
-function estadoBadge(estado) {
-    if (estado === 'Pendiente') return 'badge-pendiente';
-    if (estado === 'En Proceso') return 'badge-proceso';
-    if (estado === 'Resuelto') return 'badge-resuelto';
-    return 'badge-cerrado';
-}
-
-function prioridadBadge(prioridad) {
-    if (prioridad === 'Alta') return 'badge-alta';
-    if (prioridad === 'Media') return 'badge-media';
-    return 'badge-baja';
-}
-
-function renderTecnicoCell(ticket) {
-    if (IS_ADMIN) {
-        const options = ['<option value="">Sin asignar</option>'].concat(
-            TECNICOS.map((id, index) => {
-                const selected = Number(ticket.tecnico_id) === Number(id) ? 'selected' : '';
-                return `<option value="${safeHtml(id)}" ${selected}>${safeHtml(TECNICOS_NOMBRES[index])}</option>`;
-            })
-        ).join('');
-        return `
-            <form method="POST" action="${safeHtml(ticket.assign_url)}">
-                <select name="tecnico_id" onchange="this.form.submit()"
-                        class="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    ${options}
-                </select>
-            </form>`;
-    }
-
-    if (ticket.tecnico_nombre) {
-        return `
-            <div class="font-medium text-gray-700">${safeHtml(ticket.tecnico_nombre)}</div>
-            <div class="text-gray-400 text-xs">${safeHtml(ticket.tecnico_area || 'Soporte')}</div>`;
-    }
-
-    return '<span class="text-yellow-700 bg-yellow-50 px-2 py-1 rounded-lg text-xs font-semibold">Sin asignar</span>';
-}
-
-function renderTicketActions(ticket) {
-    const ver = `
-        <a href="${safeHtml(ticket.url)}"
-           class="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
-            <i class="fas fa-eye"></i> Ver
-        </a>`;
-
-    if (!IS_ADMIN) return ver;
-
-    const borrar = `
-        <form method="POST" action="${safeHtml(ticket.delete_url)}"
-              onsubmit="return confirm('Eliminar el ticket #${safeHtml(ticket.id)}? Esta accion no se puede deshacer.')">
-            <button type="submit"
-                    class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">
-                <i class="fas fa-trash"></i> Borrar
-            </button>
-        </form>`;
-
-    return `<div class="flex justify-center gap-2 flex-wrap">${ver}${borrar}</div>`;
-}
-
-function renderTicketRow(ticket) {
-    return `
-        <tr class="hover:bg-gray-50 transition ticket-row" data-estado="${safeHtml(ticket.estado)}">
-            <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(ticket.id)}</td>
-            <td class="px-4 py-3">
-                <div class="font-medium text-gray-800 text-sm">${safeHtml(ticket.titulo)}</div>
-                <div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(ticket.descripcion, 50))}</div>
-            </td>
-            <td class="px-4 py-3 hidden md:table-cell">
-                <div class="flex items-center gap-2">
-                    <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-bold flex-shrink-0">
-                        ${safeHtml(ticket.creador_inicial)}
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-700 font-medium">${safeHtml(ticket.creador_nombre)}</div>
-                        <div class="text-gray-400 text-xs">${safeHtml(ticket.creador_area)}</div>
-                    </div>
-                </div>
-            </td>
-            <td class="px-4 py-3 hidden lg:table-cell text-sm text-gray-600">
-                ${renderTecnicoCell(ticket)}
-            </td>
-            <td class="px-4 py-3 hidden md:table-cell text-sm text-gray-600">
-                <i class="fas ${categoriaIcon(ticket.categoria)} text-gray-400 mr-1"></i>
-                ${safeHtml(categoriaTexto(ticket.categoria))}
-            </td>
-            <td class="px-4 py-3">
-                <span class="badge ${estadoBadge(ticket.estado)}">${safeHtml(ticket.estado)}</span>
-            </td>
-            <td class="px-4 py-3 hidden sm:table-cell">
-                <span class="badge ${prioridadBadge(ticket.prioridad)}">${safeHtml(ticket.prioridad)}</span>
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">
-                ${safeHtml(ticket.fecha)}
-            </td>
-            <td class="px-4 py-3 text-center">
-                ${renderTicketActions(ticket)}
-            </td>
-        </tr>`;
-}
-
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
+// ── Contadores en header ───────────────────────────────────────
+function setText(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
 
 function actualizarContadores(stats) {
     setText('stat-total', stats.total);
@@ -472,48 +598,32 @@ function actualizarContadores(stats) {
     setText('filter-resueltos', stats.resueltos);
 }
 
-function renderTickets(tickets) {
-    const body = document.getElementById('ticketsBody');
-    const tableWrap = document.getElementById('ticketsTableWrap');
-    const empty = document.getElementById('ticketsEmpty');
-
-    if (!body || !tableWrap || !empty) return;
-
-    body.innerHTML = tickets.map(renderTicketRow).join('');
-    tableWrap.classList.toggle('hidden', tickets.length === 0);
-    empty.classList.toggle('hidden', tickets.length > 0);
-    filtrarTabla(filtroActual);
-}
-
+// ── Polling desde API ──────────────────────────────────────────
 async function actualizarTicketsTecnico() {
     if (document.hidden) return;
-
     try {
-        const res = await fetch('{{ url_for("api_tecnico_tickets") }}', {
+        const res = await fetch('{{ url_for("tickets.api_tecnico_tickets") }}', {
             headers: { 'X-Requested-With': 'fetch' }
         });
         if (!res.ok) return;
-
         const data = await res.json();
         const snapshot = JSON.stringify(data);
         if (snapshot === ticketsSnapshot) return;
-
         ticketsSnapshot = snapshot;
+        allTickets = data.tickets;
         actualizarContadores(data.stats);
-        renderTickets(data.tickets);
+        renderTabla();
     } catch {
-        // Si falla la conexion, el dashboard queda con la ultima informacion visible.
+        // Mantiene la última vista si falla la conexión.
     }
 }
 
-ticketsSnapshot = JSON.stringify({
-    total: {{ todos_tickets|length }},
-    pendientes: {{ tickets_pendientes|length }},
-    en_proceso: {{ tickets_en_proceso|length }},
-    resueltos: {{ tickets_resueltos|length }},
-    cerrados: {{ tickets_cerrados|length }}
-});
+// ── Eventos ────────────────────────────────────────────────────
+document.getElementById('searchInput')?.addEventListener('input', aplicarFiltros);
 
+// ── Inicialización ─────────────────────────────────────────────
+allTickets = {{ todos_tickets | map('__class__') | list | tojson if false else '[]' }};
+// Los tickets se cargan inmediatamente vía API para tener datos frescos.
 actualizarTicketsTecnico();
 setInterval(actualizarTicketsTecnico, 5000);
 document.addEventListener('visibilitychange', actualizarTicketsTecnico);

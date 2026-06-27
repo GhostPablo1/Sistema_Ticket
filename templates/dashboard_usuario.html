@@ -85,11 +85,21 @@
 
 <!-- Tabla de tickets -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <i class="fas fa-list text-blue-600"></i> Mis Solicitudes
-        </h2>
-        <span id="user-ticket-count" class="text-sm text-gray-500">{{ tickets|length }} ticket(s)</span>
+    <div class="px-6 py-4 border-b border-gray-100 flex flex-col gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-list text-blue-600"></i> Mis Solicitudes
+            </h2>
+            <div class="relative w-full sm:w-64">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input id="userSearchInput" type="text" placeholder="Buscar por título o estado..."
+                       class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+        <div class="flex items-center justify-between text-xs text-gray-500">
+            <span id="user-ticket-count">{{ tickets|length }} ticket(s)</span>
+            <div id="userPaginacion" class="flex items-center gap-1"></div>
+        </div>
     </div>
 
     <div id="userTicketsTableWrap" class="overflow-x-auto {% if not tickets %}hidden{% endif %}">
@@ -180,142 +190,98 @@
 
 {% block extra_scripts %}
 <script>
-let userTicketsSnapshot = '';
+let allUserTickets = [];
+let userSnapshot   = '';
+let userPagina     = 1;
+const USER_POR_PAG = 10;
 
-function safeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+function safeHtml(v) {
+    return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function shortText(v,n){const s=String(v??'');return s.length>n?s.slice(0,n)+'…':s;}
+const CAT_ICON_U={impresora:'fa-print',internet:'fa-wifi',computadora:'fa-desktop',software:'fa-code'};
+function catIcon(c){return CAT_ICON_U[c]||'fa-tools';}
+function catTexto(c){return c?c.charAt(0).toUpperCase()+c.slice(1):'—';}
+function estadoBadge(e){if(e==='Pendiente')return 'badge-pendiente';if(e==='En Proceso')return 'badge-proceso';if(e==='Resuelto')return 'badge-resuelto';return 'badge-cerrado';}
+function prioridadBadge(p){if(p==='Alta')return 'badge-alta';if(p==='Media')return 'badge-media';return 'badge-baja';}
+
+function getFilteredUserTickets(){
+    const q=(document.getElementById('userSearchInput')?.value||'').toLowerCase().trim();
+    if(!q) return allUserTickets;
+    return allUserTickets.filter(t=>(t.titulo+' '+(t.estado||'')+' '+(t.categoria||'')).toLowerCase().includes(q));
 }
 
-function shortText(value, maxLength) {
-    const text = String(value ?? '');
-    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+function renderUserPaginacion(total){
+    const cont=document.getElementById('userPaginacion');
+    if(!cont)return;
+    const totalPages=Math.ceil(total/USER_POR_PAG);
+    if(totalPages<=1){cont.innerHTML='';return;}
+    let btns=`<button onclick="irUserPagina(${userPagina-1})" ${userPagina===1?'disabled':''} class="px-2 py-1 rounded border text-xs ${userPagina===1?'text-gray-300 border-gray-100':'hover:bg-gray-50 border-gray-200'}">‹</button>`;
+    for(let p=1;p<=totalPages;p++){const a=p===userPagina?'bg-blue-800 text-white border-blue-800':'hover:bg-gray-50 border-gray-200 text-gray-700';btns+=`<button onclick="irUserPagina(${p})" class="px-2 py-1 rounded border text-xs ${a}">${p}</button>`;}
+    btns+=`<button onclick="irUserPagina(${userPagina+1})" ${userPagina===totalPages?'disabled':''} class="px-2 py-1 rounded border text-xs ${userPagina===totalPages?'text-gray-300 border-gray-100':'hover:bg-gray-50 border-gray-200'}">›</button>`;
+    cont.innerHTML=btns;
 }
 
-function categoriaIcon(categoria) {
-    const iconos = {
-        impresora: 'fa-print',
-        internet: 'fa-wifi',
-        computadora: 'fa-desktop',
-        software: 'fa-code',
-    };
-    return iconos[categoria] || 'fa-tools';
+function irUserPagina(p){const f=getFilteredUserTickets();const tp=Math.ceil(f.length/USER_POR_PAG);userPagina=Math.max(1,Math.min(p,tp||1));renderUserTabla();}
+
+function renderUserTicketRow(t){
+    return `<tr class="hover:bg-gray-50 transition">
+        <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(t.id)}</td>
+        <td class="px-4 py-3"><div class="font-medium text-gray-800 text-sm">${safeHtml(t.titulo)}</div><div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(t.descripcion,60))}</div></td>
+        <td class="px-4 py-3 hidden md:table-cell"><span class="text-sm text-gray-600"><i class="fas ${catIcon(t.categoria)} text-gray-400 mr-1"></i>${safeHtml(catTexto(t.categoria))}</span></td>
+        <td class="px-4 py-3"><span class="badge ${estadoBadge(t.estado)}">${safeHtml(t.estado)}</span></td>
+        <td class="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">${t.tecnico_nombre?`<div class="font-medium text-gray-700">${safeHtml(t.tecnico_nombre)}</div><div class="text-gray-400 text-xs">${safeHtml(t.tecnico_area||'Soporte')}</div>`:'<span class="text-gray-400">Sin asignar</span>'}</td>
+        <td class="px-4 py-3 hidden sm:table-cell"><span class="badge ${prioridadBadge(t.prioridad)}">${safeHtml(t.prioridad)}</span></td>
+        <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">${safeHtml(t.fecha)}</td>
+        <td class="px-4 py-3 text-center"><a href="${safeHtml(t.url)}" class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium text-sm hover:underline"><i class="fas fa-eye"></i><span class="hidden sm:inline">Ver</span></a></td>
+    </tr>`;
 }
 
-function categoriaTexto(categoria) {
-    if (!categoria) return '---';
-    return categoria.charAt(0).toUpperCase() + categoria.slice(1);
+function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+
+function renderUserTabla(){
+    const filtered=getFilteredUserTickets();
+    const total=filtered.length;
+    const inicio=(userPagina-1)*USER_POR_PAG;
+    const pagina=filtered.slice(inicio,inicio+USER_POR_PAG);
+    const body=document.getElementById('userTicketsBody');
+    const tableWrap=document.getElementById('userTicketsTableWrap');
+    const empty=document.getElementById('userTicketsEmpty');
+    if(!body)return;
+    body.innerHTML=pagina.map(renderUserTicketRow).join('');
+    tableWrap?.classList.toggle('hidden',total===0);
+    empty?.classList.toggle('hidden',total>0);
+    const q=(document.getElementById('userSearchInput')?.value||'').trim();
+    setText('user-ticket-count',q?`${total} resultado${total!==1?'s':''} de ${allUserTickets.length}`:`${total} ticket${total!==1?'s':''}`);
+    renderUserPaginacion(total);
 }
 
-function estadoBadge(estado) {
-    if (estado === 'Pendiente') return 'badge-pendiente';
-    if (estado === 'En Proceso') return 'badge-proceso';
-    if (estado === 'Resuelto') return 'badge-resuelto';
-    return 'badge-cerrado';
+function actualizarContadoresUsuario(stats){
+    setText('user-stat-total',stats.total);
+    setText('user-stat-pendientes',stats.pendientes);
+    setText('user-stat-en-proceso',stats.en_proceso);
+    setText('user-stat-resueltos',stats.resueltos);
 }
 
-function prioridadBadge(prioridad) {
-    if (prioridad === 'Alta') return 'badge-alta';
-    if (prioridad === 'Media') return 'badge-media';
-    return 'badge-baja';
-}
-
-function renderUserTicketRow(ticket) {
-    return `
-        <tr class="hover:bg-gray-50 transition">
-            <td class="px-4 py-3 text-sm text-gray-500 font-mono">#${safeHtml(ticket.id)}</td>
-            <td class="px-4 py-3">
-                <div class="font-medium text-gray-800 text-sm">${safeHtml(ticket.titulo)}</div>
-                <div class="text-gray-400 text-xs hidden sm:block">${safeHtml(shortText(ticket.descripcion, 60))}</div>
-            </td>
-            <td class="px-4 py-3 hidden md:table-cell">
-                <span class="text-sm text-gray-600">
-                    <i class="fas ${categoriaIcon(ticket.categoria)} text-gray-400 mr-1"></i>
-                    ${safeHtml(categoriaTexto(ticket.categoria))}
-                </span>
-            </td>
-            <td class="px-4 py-3">
-                <span class="badge ${estadoBadge(ticket.estado)}">${safeHtml(ticket.estado)}</span>
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
-                ${ticket.tecnico_nombre
-                    ? `<div class="font-medium text-gray-700">${safeHtml(ticket.tecnico_nombre)}</div><div class="text-gray-400 text-xs">${safeHtml(ticket.tecnico_area || 'Soporte')}</div>`
-                    : '<span class="text-gray-400">Sin asignar</span>'}
-            </td>
-            <td class="px-4 py-3 hidden sm:table-cell">
-                <span class="badge ${prioridadBadge(ticket.prioridad)}">${safeHtml(ticket.prioridad)}</span>
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-500 hidden lg:table-cell">
-                ${safeHtml(ticket.fecha)}
-            </td>
-            <td class="px-4 py-3 text-center">
-                <a href="${safeHtml(ticket.url)}"
-                   class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium text-sm hover:underline">
-                    <i class="fas fa-eye"></i><span class="hidden sm:inline">Ver</span>
-                </a>
-            </td>
-        </tr>`;
-}
-
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-function actualizarContadoresUsuario(stats) {
-    setText('user-stat-total', stats.total);
-    setText('user-stat-pendientes', stats.pendientes);
-    setText('user-stat-en-proceso', stats.en_proceso);
-    setText('user-stat-resueltos', stats.resueltos);
-    setText('user-ticket-count', `${stats.total} ticket(s)`);
-}
-
-function renderUserTickets(tickets) {
-    const body = document.getElementById('userTicketsBody');
-    const tableWrap = document.getElementById('userTicketsTableWrap');
-    const empty = document.getElementById('userTicketsEmpty');
-
-    if (!body || !tableWrap || !empty) return;
-
-    body.innerHTML = tickets.map(renderUserTicketRow).join('');
-    tableWrap.classList.toggle('hidden', tickets.length === 0);
-    empty.classList.toggle('hidden', tickets.length > 0);
-}
-
-async function actualizarTicketsUsuario() {
-    if (document.hidden) return;
-
-    try {
-        const res = await fetch('{{ url_for("api_usuario_tickets") }}', {
-            headers: { 'X-Requested-With': 'fetch' }
-        });
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const snapshot = JSON.stringify(data);
-        if (snapshot === userTicketsSnapshot) return;
-
-        userTicketsSnapshot = snapshot;
+async function actualizarTicketsUsuario(){
+    if(document.hidden)return;
+    try{
+        const res=await fetch('{{ url_for("tickets.api_usuario_tickets") }}',{headers:{'X-Requested-With':'fetch'}});
+        if(!res.ok)return;
+        const data=await res.json();
+        const snapshot=JSON.stringify(data);
+        if(snapshot===userSnapshot)return;
+        userSnapshot=snapshot;
+        allUserTickets=data.tickets;
         actualizarContadoresUsuario(data.stats);
-        renderUserTickets(data.tickets);
-    } catch {
-        // Si falla la conexion, se mantiene la ultima informacion visible.
-    }
+        renderUserTabla();
+    }catch{}
 }
 
-userTicketsSnapshot = JSON.stringify({
-    total: {{ tickets|length }},
-    pendientes: {{ pendientes }},
-    en_proceso: {{ en_proceso }},
-    resueltos: {{ resueltos }}
-});
+document.getElementById('userSearchInput')?.addEventListener('input',()=>{userPagina=1;renderUserTabla();});
 
 actualizarTicketsUsuario();
-setInterval(actualizarTicketsUsuario, 5000);
-document.addEventListener('visibilitychange', actualizarTicketsUsuario);
+setInterval(actualizarTicketsUsuario,5000);
+document.addEventListener('visibilitychange',actualizarTicketsUsuario);
 </script>
 {% endblock %}
