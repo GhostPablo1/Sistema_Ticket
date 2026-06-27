@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
+from flask_migrate import Migrate
 from database import db, Usuario, Ticket, MensajeIA, MensajeTicket, Notificacion
 from ai_assistant import get_ai_response
 from datetime import datetime
@@ -82,6 +83,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 print(f"📁 URI final: {_safe_db_uri_for_log(db_uri)}", file=sys.stderr)
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 
 def _env_bool(name, default=False):
