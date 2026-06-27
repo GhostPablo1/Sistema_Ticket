@@ -2,6 +2,7 @@
 Blueprint de autenticación: registro, login, logout,
 verificación de email y recuperación de contraseña.
 """
+import re
 from flask import (
     Blueprint, render_template, request, redirect,
     url_for, flash, session, current_app,
@@ -15,6 +16,22 @@ from utils.constants import ADMIN_ROLE, TECH_ROLE, USER_ROLE, STAFF_ROLES
 from utils.security import serializer, SALT_VERIFICACION, SALT_RESET
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _validar_password(password: str) -> str | None:
+    """
+    Valida que la contraseña cumpla los criterios de seguridad.
+    Retorna un mensaje de error o None si es válida.
+    """
+    if len(password) < 8:
+        return 'La contraseña debe tener al menos 8 caracteres.'
+    if not re.search(r'[A-Z]', password):
+        return 'La contraseña debe contener al menos una letra mayúscula.'
+    if not re.search(r'[a-z]', password):
+        return 'La contraseña debe contener al menos una letra minúscula.'
+    if not re.search(r'[0-9]', password):
+        return 'La contraseña debe contener al menos un número.'
+    return None
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -63,8 +80,11 @@ def register():
         if password != confirm:
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('register.html')
-        if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+
+        # Validación de fortaleza
+        error_pass = _validar_password(password)
+        if error_pass:
+            flash(error_pass, 'danger')
             return render_template('register.html')
         if Usuario.query.filter_by(email=email).first():
             flash('Ya existe una cuenta con ese correo electrónico.', 'danger')
@@ -172,8 +192,9 @@ def reset_password(token):
         nueva     = request.form['password']
         confirmar = request.form['confirm_password']
 
-        if len(nueva) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        error_pass = _validar_password(nueva)
+        if error_pass:
+            flash(error_pass, 'danger')
             return render_template('reset_password.html', token=token)
         if nueva != confirmar:
             flash('Las contraseñas no coinciden.', 'danger')

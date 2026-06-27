@@ -24,14 +24,15 @@
             background: #f9fafb;
         }
         .input-plain:focus { outline: none; border-color: #2563eb; background: white; }
+        .strength-bar { height: 5px; border-radius: 9999px; transition: width .3s, background .3s; }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center py-8 px-4"
       style="background: linear-gradient(135deg, #0f2744 0%, #1a3a6e 50%, #1e4d8c 100%);">
 
     <div class="w-full max-w-lg fade-up">
-        <!-- Card -->
         <div class="bg-white rounded-2xl shadow-2xl p-8">
+
             <!-- Header -->
             <div class="text-center mb-7">
                 <div class="w-16 h-16 bg-blue-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -56,7 +57,8 @@
                 {% endif %}
             {% endwith %}
 
-            <form method="POST" class="space-y-4">
+            <form method="POST" id="registerForm" class="space-y-4" novalidate>
+
                 <!-- Nombre -->
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1.5">Nombre Completo *</label>
@@ -93,31 +95,65 @@
                     </select>
                 </div>
 
-                <!-- Contraseñas en dos columnas -->
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Contraseña *</label>
-                        <div class="relative">
-                            <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-                            <input type="password" name="password" id="pass1" class="input-field"
-                                   placeholder="Mín. 6 caracteres" required minlength="6">
-                        </div>
+                <!-- Contraseña -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Contraseña *</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="password" name="password" id="pass1" class="input-field pr-10"
+                               placeholder="Mín. 8 caracteres" required>
+                        <button type="button" onclick="toggleVer('pass1','eye1')"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-eye" id="eye1"></i>
+                        </button>
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Confirmar *</label>
-                        <div class="relative">
-                            <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-                            <input type="password" name="confirm_password" id="pass2" class="input-field"
-                                   placeholder="Repite la contraseña" required minlength="6">
+
+                    <!-- Barra de fortaleza -->
+                    <div class="mt-2">
+                        <div class="flex gap-1 mb-1">
+                            <div class="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                <div id="bar1" class="strength-bar h-full w-0 bg-gray-200"></div>
+                            </div>
+                            <div class="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                <div id="bar2" class="strength-bar h-full w-0 bg-gray-200"></div>
+                            </div>
+                            <div class="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                <div id="bar3" class="strength-bar h-full w-0 bg-gray-200"></div>
+                            </div>
+                            <div class="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                <div id="bar4" class="strength-bar h-full w-0 bg-gray-200"></div>
+                            </div>
                         </div>
+                        <div id="strengthLabel" class="text-xs text-gray-400">Escribe una contraseña</div>
                     </div>
+
+                    <!-- Requisitos -->
+                    <ul class="mt-2 space-y-1 text-xs">
+                        <li id="req-len"  class="flex items-center gap-1.5 text-gray-400"><i class="fas fa-circle text-[8px]"></i> Mínimo 8 caracteres</li>
+                        <li id="req-upper" class="flex items-center gap-1.5 text-gray-400"><i class="fas fa-circle text-[8px]"></i> Al menos una mayúscula (A-Z)</li>
+                        <li id="req-lower" class="flex items-center gap-1.5 text-gray-400"><i class="fas fa-circle text-[8px]"></i> Al menos una minúscula (a-z)</li>
+                        <li id="req-num"  class="flex items-center gap-1.5 text-gray-400"><i class="fas fa-circle text-[8px]"></i> Al menos un número (0-9)</li>
+                        <li id="req-spec" class="flex items-center gap-1.5 text-gray-400"><i class="fas fa-circle text-[8px]"></i> Al menos un símbolo (!@#$...)</li>
+                    </ul>
                 </div>
 
-                <!-- Match indicator -->
-                <div id="passMatch" class="text-xs hidden"></div>
+                <!-- Confirmar contraseña -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Confirmar Contraseña *</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="password" name="confirm_password" id="pass2" class="input-field pr-10"
+                               placeholder="Repite la contraseña" required>
+                        <button type="button" onclick="toggleVer('pass2','eye2')"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-eye" id="eye2"></i>
+                        </button>
+                    </div>
+                    <div id="passMatch" class="text-xs mt-1 hidden"></div>
+                </div>
 
-                <button type="submit"
-                        class="w-full bg-blue-900 hover:bg-blue-800 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg mt-2">
+                <button type="submit" id="submitBtn"
+                        class="w-full bg-blue-900 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg mt-2">
                     <i class="fas fa-user-plus"></i>
                     Crear Cuenta
                 </button>
@@ -138,22 +174,124 @@
         </p>
     </div>
 
-    <script>
-        const p1 = document.getElementById('pass1');
-        const p2 = document.getElementById('pass2');
-        const msg = document.getElementById('passMatch');
+<script>
+// ── Mostrar/ocultar contraseña ─────────────────────────────────
+function toggleVer(inputId, iconId) {
+    const el = document.getElementById(inputId);
+    const ic = document.getElementById(iconId);
+    el.type = el.type === 'password' ? 'text' : 'password';
+    ic.className = el.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+}
 
-        function checkMatch() {
-            if (!p2.value) { msg.classList.add('hidden'); return; }
-            msg.classList.remove('hidden');
-            if (p1.value === p2.value) {
-                msg.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i><span class="text-green-600">Las contraseñas coinciden</span>';
-            } else {
-                msg.innerHTML = '<i class="fas fa-times-circle text-red-500 mr-1"></i><span class="text-red-600">Las contraseñas no coinciden</span>';
-            }
+// ── Evaluador de fortaleza ─────────────────────────────────────
+const RULES = [
+    { id: 'req-len',   test: p => p.length >= 8,                              label: 'Mínimo 8 caracteres' },
+    { id: 'req-upper', test: p => /[A-Z]/.test(p),                            label: 'Al menos una mayúscula' },
+    { id: 'req-lower', test: p => /[a-z]/.test(p),                            label: 'Al menos una minúscula' },
+    { id: 'req-num',   test: p => /[0-9]/.test(p),                            label: 'Al menos un número' },
+    { id: 'req-spec',  test: p => /[^A-Za-z0-9]/.test(p),                    label: 'Al menos un símbolo' },
+];
+
+const LEVELS = [
+    { score: 0, label: 'Muy débil',  color: '#ef4444' },
+    { score: 1, label: 'Débil',      color: '#f97316' },
+    { score: 2, label: 'Regular',    color: '#eab308' },
+    { score: 3, label: 'Fuerte',     color: '#22c55e' },
+    { score: 4, label: 'Muy fuerte', color: '#16a34a' },
+];
+
+let strengthScore = 0;
+
+function evalStrength(password) {
+    if (!password) {
+        // Resetear todo
+        [1,2,3,4].forEach(i => {
+            const b = document.getElementById('bar'+i);
+            b.style.width = '0%'; b.style.background = '#e5e7eb';
+        });
+        document.getElementById('strengthLabel').textContent = 'Escribe una contraseña';
+        document.getElementById('strengthLabel').style.color = '#9ca3af';
+        RULES.forEach(r => markReq(r.id, null));
+        strengthScore = 0;
+        return;
+    }
+
+    let score = 0;
+    RULES.forEach(r => {
+        const ok = r.test(password);
+        if (ok) score++;
+        markReq(r.id, ok);
+    });
+    strengthScore = score;
+
+    const level = LEVELS[Math.min(score, LEVELS.length - 1)];
+    [1,2,3,4].forEach(i => {
+        const b = document.getElementById('bar'+i);
+        if (i <= score) {
+            b.style.width = '100%';
+            b.style.background = level.color;
+        } else {
+            b.style.width = '0%';
+            b.style.background = '#e5e7eb';
         }
-        p1.addEventListener('input', checkMatch);
-        p2.addEventListener('input', checkMatch);
-    </script>
+    });
+    const lbl = document.getElementById('strengthLabel');
+    lbl.textContent = `Fortaleza: ${level.label}`;
+    lbl.style.color = level.color;
+}
+
+function markReq(id, ok) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (ok === null) {
+        el.className = 'flex items-center gap-1.5 text-gray-400';
+        el.querySelector('i').className = 'fas fa-circle text-[8px]';
+    } else if (ok) {
+        el.className = 'flex items-center gap-1.5 text-green-600';
+        el.querySelector('i').className = 'fas fa-check-circle text-green-500';
+    } else {
+        el.className = 'flex items-center gap-1.5 text-red-500';
+        el.querySelector('i').className = 'fas fa-times-circle text-red-400';
+    }
+}
+
+// ── Validación de coincidencia ─────────────────────────────────
+function checkMatch() {
+    const p1v = document.getElementById('pass1').value;
+    const p2v = document.getElementById('pass2').value;
+    const msg = document.getElementById('passMatch');
+    if (!p2v) { msg.classList.add('hidden'); return; }
+    msg.classList.remove('hidden');
+    if (p1v === p2v) {
+        msg.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i><span class="text-green-600">Las contraseñas coinciden</span>';
+    } else {
+        msg.innerHTML = '<i class="fas fa-times-circle text-red-500 mr-1"></i><span class="text-red-600">Las contraseñas no coinciden</span>';
+    }
+}
+
+// ── Eventos ────────────────────────────────────────────────────
+document.getElementById('pass1').addEventListener('input', function() {
+    evalStrength(this.value);
+    checkMatch();
+});
+document.getElementById('pass2').addEventListener('input', checkMatch);
+
+// ── Bloquear submit si contraseña débil ────────────────────────
+document.getElementById('registerForm').addEventListener('submit', function(e) {
+    const p1 = document.getElementById('pass1').value;
+    const p2 = document.getElementById('pass2').value;
+
+    if (strengthScore < 3) {
+        e.preventDefault();
+        alert('La contraseña es demasiado débil. Debe tener al menos: 8 caracteres, una mayúscula, una minúscula y un número.');
+        return;
+    }
+    if (p1 !== p2) {
+        e.preventDefault();
+        alert('Las contraseñas no coinciden.');
+        return;
+    }
+});
+</script>
 </body>
 </html>
