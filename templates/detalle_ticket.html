@@ -5,7 +5,7 @@
 
 <!-- Breadcrumb -->
 <div class="flex items-center gap-2 text-sm text-gray-500 mb-5">
-    <a href="{{ url_for('dashboard_usuario') if current_user.rol=='usuario' else url_for('dashboard_tecnico') }}"
+    <a href="{{ url_for('tickets.dashboard_usuario') if current_user.rol=='usuario' else url_for('tickets.dashboard_tecnico') }}"
        class="hover:text-blue-700 flex items-center gap-1">
         <i class="fas fa-arrow-left text-xs"></i>
         <span>{{ 'Mis Tickets' if current_user.rol=='usuario' else 'Dashboard' }}</span>
@@ -110,7 +110,7 @@
             </h3>
             <div class="flex flex-wrap gap-3">
                 <!-- Cambiar estado -->
-                <form method="POST" action="{{ url_for('update_ticket_estado', ticket_id=ticket.id) }}" class="flex items-center gap-2">
+                <form method="POST" action="{{ url_for('tickets.update_ticket_estado', ticket_id=ticket.id) }}" class="flex items-center gap-2">
                     <label class="text-sm text-gray-600 font-medium">Estado:</label>
                     <select name="estado" onchange="this.form.submit()"
                             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -122,7 +122,7 @@
                 </form>
 
                 {% if current_user.rol == 'admin' %}
-                <form method="POST" action="{{ url_for('admin_asignar_ticket', ticket_id=ticket.id) }}" class="flex items-center gap-2">
+                <form method="POST" action="{{ url_for('admin.asignar_ticket', ticket_id=ticket.id) }}" class="flex items-center gap-2">
                     <label class="text-sm text-gray-600 font-medium">Asignar:</label>
                     <select name="tecnico_id" onchange="this.form.submit()"
                             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -137,7 +137,7 @@
                 {% endif %}
 
                 {% if ticket.estado not in ['Cerrado'] %}
-                <a id="ticketCloseAction" href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
+                <a id="ticketCloseAction" href="{{ url_for('tickets.cerrar_ticket', ticket_id=ticket.id) }}"
                    onclick="return confirm('¿Cerrar este ticket?')"
                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
                     <i class="fas fa-times-circle"></i> Cerrar
@@ -145,7 +145,7 @@
                 {% endif %}
 
                 {% if current_user.rol == 'admin' %}
-                <form method="POST" action="{{ url_for('admin_eliminar_ticket', ticket_id=ticket.id) }}"
+                <form method="POST" action="{{ url_for('admin.eliminar_ticket', ticket_id=ticket.id) }}"
                       onsubmit="return confirm('¿Eliminar este ticket? Esta acción no se puede deshacer.')">
                     <button type="submit"
                             class="bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
@@ -166,7 +166,7 @@
                     <h3 class="font-semibold text-gray-800 text-sm">¿El problema fue resuelto?</h3>
                     <p class="text-gray-500 text-xs mt-0.5">Si ya no necesitas soporte, puedes cerrar este ticket.</p>
                 </div>
-                <a href="{{ url_for('cerrar_ticket', ticket_id=ticket.id) }}"
+                <a href="{{ url_for('tickets.cerrar_ticket', ticket_id=ticket.id) }}"
                    onclick="return confirm('¿Confirmas que el problema fue resuelto?')"
                    class="bg-green-600 hover:bg-green-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 flex-shrink-0">
                     <i class="fas fa-check"></i> Marcar como resuelto
@@ -187,7 +187,7 @@
                     </p>
                 </div>
                 {% if current_user.rol in ['admin', 'tecnico'] %}
-                <form method="POST" action="{{ url_for('regenerar_informe_ticket', ticket_id=ticket.id) }}">
+                <form method="POST" action="{{ url_for('tickets.regenerar_informe_ticket', ticket_id=ticket.id) }}">
                     <button type="submit"
                             class="bg-green-50 hover:bg-green-100 text-green-700 font-semibold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
                         <i class="fas fa-sync-alt"></i> Regenerar

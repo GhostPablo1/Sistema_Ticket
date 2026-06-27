@@ -1,0 +1,1 @@
+# Blueprints del sistema TicketIA

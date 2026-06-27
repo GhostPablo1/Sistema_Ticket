@@ -1,4 +1,11 @@
+"""
+Módulo de asistente IA para soporte técnico.
+Usa OpenRouter (compatible con OpenAI SDK) con fallback basado en reglas.
+Soporta historial de conversación para mantener contexto entre mensajes.
+"""
 import os
+from typing import List, Dict
+
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -14,10 +21,12 @@ Reglas:
 - Si el usuario dice "tinta baja", habla de tinta. Si dice "papel atascado", habla de atasco. Si dice "pantalla azul", habla de pantalla azul.
 - Usa pasos numerados, claros y accionables.
 - Si el problema requiere que el técnico intervenga físicamente, dilo con amabilidad y recuérdale al usuario que el técnico ya está en camino.
-- Máximo 6 pasos por respuesta. Sé preciso, no repitas información obvia."""
+- Máximo 6 pasos por respuesta. Sé preciso, no repitas información obvia.
+- Recuerda el contexto de la conversación: si el usuario ya intentó algo, no vuelvas a sugerirlo."""
 
 
 def _fallback_response(user_question: str, user_name: str) -> str:
+    """Respuesta basada en reglas cuando la API no está disponible."""
     q = user_question.lower()
     if any(w in q for w in ["tinta", "tóner", "toner", "cartucho", "borroso", "manchas"]):
         return (
@@ -72,33 +81,53 @@ def _fallback_response(user_question: str, user_name: str) -> str:
     )
 
 
-def get_ai_response(user_question: str, user_name: str) -> str:
-    api_key = os.getenv("ANTHROPIC_AUTH_TOKEN")
-    base_url = os.getenv("ANTHROPIC_BASE_URL", "https://openrouter.ai/api")
-    model = os.getenv("ANTHROPIC_MODEL", "openai/gpt-oss-20b:free")
+def get_ai_response(
+    user_question: str,
+    user_name: str,
+    historial: List[Dict[str, str]] | None = None,
+) -> str:
+    """
+    Genera una respuesta del asistente IA.
 
-    # Normalize base_url for OpenAI-compatible API
+    Args:
+        user_question: Pregunta o descripción del usuario.
+        user_name: Nombre del usuario para personalizar la respuesta.
+        historial: Lista de mensajes previos [{role, content}] para mantener contexto.
+
+    Returns:
+        Respuesta del asistente como string.
+    """
+    api_key  = os.getenv("ANTHROPIC_AUTH_TOKEN")
+    base_url = os.getenv("ANTHROPIC_BASE_URL", "https://openrouter.ai/api")
+    model    = os.getenv("ANTHROPIC_MODEL", "openai/gpt-oss-20b:free")
+
     if not base_url.endswith("/v1"):
         base_url = base_url.rstrip("/") + "/v1"
 
-    # Map placeholder names to a working free model
     if not model or model in ("openrouter/free",):
         model = "openai/gpt-oss-20b:free"
 
     if api_key:
         try:
             client = OpenAI(api_key=api_key, base_url=base_url)
+
+            system_content = (
+                _SYSTEM_PROMPT
+                + f"\n\nEl nombre del trabajador es: {user_name}. Dirígete a él por su nombre."
+            )
+
+            messages = [{"role": "system", "content": system_content}]
+
+            # Incluir historial previo (máx 10 turnos para no saturar el contexto)
+            if historial:
+                messages.extend(historial[-20:])  # 10 turnos = 20 mensajes
+
+            messages.append({"role": "user", "content": user_question})
+
             response = client.chat.completions.create(
                 model=model,
-                max_tokens=500,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": _SYSTEM_PROMPT
-                        + f"\n\nEl nombre del trabajador es: {user_name}. Dirígete a él por su nombre.",
-                    },
-                    {"role": "user", "content": user_question},
-                ],
+                max_tokens=600,
+                messages=messages,
             )
             return response.choices[0].message.content
         except Exception as e:

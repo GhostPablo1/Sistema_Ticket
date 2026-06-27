@@ -7,7 +7,7 @@
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
     <div>
         <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <a href="{{ url_for('dashboard_tecnico') }}" class="hover:text-blue-700 flex items-center gap-1">
+            <a href="{{ url_for('tickets.dashboard_tecnico') }}" class="hover:text-blue-700 flex items-center gap-1">
                 <i class="fas fa-arrow-left text-xs"></i> Dashboard
             </a>
             <i class="fas fa-chevron-right text-xs"></i>
@@ -16,7 +16,7 @@
         <h1 class="text-2xl font-bold text-gray-800">Gestión de Usuarios</h1>
         <p class="text-gray-500 text-sm">Los usuarios se registran solos; aquí apruebas quién será técnico de soporte.</p>
     </div>
-    <a href="{{ url_for('register') }}"
+    <a href="{{ url_for('auth.register') }}"
        class="inline-flex items-center gap-2 bg-white border border-blue-200 hover:border-blue-400 text-blue-800 font-semibold px-5 py-2.5 rounded-xl shadow-sm transition">
         <i class="fas fa-link"></i> Formulario de registro
     </a>
@@ -122,14 +122,14 @@
                         {% if u.id != current_user.id %}
                         <div class="flex justify-center gap-2 flex-wrap">
                             {% if u.rol == 'usuario' %}
-                            <form method="POST" action="{{ url_for('admin_hacer_tecnico', user_id=u.id) }}">
+                            <form method="POST" action="{{ url_for('admin.hacer_tecnico', user_id=u.id) }}">
                                 <button type="submit"
                                         class="inline-flex items-center gap-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
                                     <i class="fas fa-headset"></i> Hacer técnico
                                 </button>
                             </form>
                             {% elif u.rol == 'tecnico' %}
-                            <form method="POST" action="{{ url_for('admin_quitar_tecnico', user_id=u.id) }}"
+                            <form method="POST" action="{{ url_for('admin.quitar_tecnico', user_id=u.id) }}"
                                   onsubmit="return confirm('¿Quitar rol técnico a {{ u.nombre }}? Sus tickets abiertos quedarán pendientes de reasignación.')">
                                 <button type="submit"
                                         class="inline-flex items-center gap-1 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
@@ -137,7 +137,7 @@
                                 </button>
                             </form>
                             {% endif %}
-                            <form method="POST" action="{{ url_for('admin_eliminar_usuario', user_id=u.id) }}"
+                            <form method="POST" action="{{ url_for('admin.eliminar_usuario', user_id=u.id) }}"
                                   onsubmit="return confirm('¿Eliminar al usuario {{ u.nombre }}? Esta acción no se puede deshacer.')">
                                 <button type="submit"
                                         class="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">

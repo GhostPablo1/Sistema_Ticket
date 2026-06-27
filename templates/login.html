@@ -125,7 +125,7 @@
                 </form>
 
                 <div class="mt-4 text-right">
-                    <a href="{{ url_for('recuperar_password') }}"
+                    <a href="{{ url_for('auth.recuperar_password') }}"
                        class="text-sm text-blue-600 hover:underline">
                         ¿Olvidaste tu contraseña?
                     </a>
@@ -134,7 +134,7 @@
                 <div class="mt-4 text-center">
                     <p class="text-gray-500 text-sm">
                         ¿No tienes cuenta?
-                        <a href="{{ url_for('register') }}" class="text-blue-700 font-semibold hover:underline">
+                        <a href="{{ url_for('auth.register') }}" class="text-blue-700 font-semibold hover:underline">
                             Regístrate aquí
                         </a>
                     </p>
