@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 db = SQLAlchemy()
@@ -9,7 +10,23 @@ class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
+    password = db.Column(db.String(256), nullable=False)
+
+    def set_password(self, raw_password: str) -> None:
+        """Hashea y almacena la contraseña."""
+        self.password = generate_password_hash(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        """Verifica la contraseña contra el hash almacenado.
+        Soporta contraseñas antiguas en texto plano durante la migración.
+        """
+        if self.password.startswith('pbkdf2:') or self.password.startswith('scrypt:'):
+            return check_password_hash(self.password, raw_password)
+        # Contraseña legacy (texto plano): verificar y migrar al vuelo
+        if self.password == raw_password:
+            self.set_password(raw_password)
+            return True
+        return False
     rol = db.Column(db.String(20), nullable=False)
     area = db.Column(db.String(100))
     activo = db.Column(db.Boolean, default=True, nullable=True)

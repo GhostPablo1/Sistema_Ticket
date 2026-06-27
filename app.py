@@ -20,7 +20,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'clave-secreta-ticketia-2026'
+_secret_key = os.environ.get('SECRET_KEY')
+if not _secret_key:
+    import secrets as _secrets
+    _secret_key = _secrets.token_hex(32)
+    print("⚠️  SECRET_KEY no configurada en .env — usando clave efímera (las sesiones no sobrevivirán reinicios).", file=sys.stderr)
+app.config['SECRET_KEY'] = _secret_key
 
 # ============================================================
 # CONFIGURACIÓN DE BASE DE DATOS
@@ -169,27 +174,35 @@ with app.app_context():
         admin_demo.rol = ADMIN_ROLE
         admin_demo.area = admin_demo.area or 'Informática'
         admin_demo.email_verificado = True
+        # Migrar a hash si aún tiene contraseña en texto plano
+        if not (admin_demo.password.startswith('pbkdf2:') or admin_demo.password.startswith('scrypt:')):
+            admin_demo.set_password(admin_demo.password)
     else:
-        db.session.add(Usuario(
+        admin_demo = Usuario(
             nombre='Administrador TI',
             email='tecnico@bellavista.gob.pe',
-            password='tecnico0123',
             rol=ADMIN_ROLE,
             area='Informática',
             activo=True,
             email_verificado=True,
-        ))
+        )
+        admin_demo.set_password('tecnico0123')
+        db.session.add(admin_demo)
 
-    if not Usuario.query.filter_by(email='usuario@bellavista.gob.pe').first():
-        db.session.add(Usuario(
+    usuario_demo = Usuario.query.filter_by(email='usuario@bellavista.gob.pe').first()
+    if not usuario_demo:
+        usuario_demo = Usuario(
             nombre='Usuario Demo',
             email='usuario@bellavista.gob.pe',
-            password='usuario123',
             rol=USER_ROLE,
             area='Administración',
             activo=True,
             email_verificado=True,
-        ))
+        )
+        usuario_demo.set_password('usuario123')
+        db.session.add(usuario_demo)
+    elif not (usuario_demo.password.startswith('pbkdf2:') or usuario_demo.password.startswith('scrypt:')):
+        usuario_demo.set_password(usuario_demo.password)
 
     db.session.commit()
     print("✅ Base de datos lista.", file=sys.stderr)
@@ -592,11 +605,12 @@ def login():
         password = request.form['password']
         user     = Usuario.query.filter_by(email=email).first()
 
-        if user and user.password == password:
+        if user and user.check_password(password):
             if not user.email_verificado:
                 session['pending_email'] = email
                 flash('Debes verificar tu correo electrónico antes de iniciar sesión.', 'warning')
                 return redirect(url_for('verificar_pendiente'))
+            db.session.commit()  # persiste migración de hash si aplicó
             login_user(user)
             if user.rol in STAFF_ROLES:
                 return redirect(url_for('dashboard_tecnico'))
@@ -632,9 +646,10 @@ def register():
             flash('Ya existe una cuenta con ese correo electrónico.', 'danger')
             return render_template('register.html')
 
-        nuevo = Usuario(nombre=nombre, email=email, password=password,
+        nuevo = Usuario(nombre=nombre, email=email,
                         rol=USER_ROLE, area=area, activo=True,
                         email_verificado=False)
+        nuevo.set_password(password)
         db.session.add(nuevo)
         db.session.commit()
 
@@ -742,7 +757,7 @@ def reset_password(token):
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('reset_password.html', token=token)
 
-        user.password = nueva
+        user.set_password(nueva)
         db.session.commit()
         flash('Contraseña actualizada correctamente. Ya puedes iniciar sesión.', 'success')
         return redirect(url_for('login'))
