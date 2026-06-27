@@ -574,7 +574,7 @@ async function actualizarSupportChat() {
     if (document.hidden) return;
 
     try {
-        const res = await fetch('{{ url_for("api_ticket_mensajes", ticket_id=ticket.id) }}', {
+        const res = await fetch('{{ url_for("tickets.api_ticket_mensajes", ticket_id=ticket.id) }}', {
             headers: { 'X-Requested-With': 'fetch' }
         });
         if (!res.ok) return;
@@ -602,7 +602,7 @@ if (supportChatForm) {
         input.value = '';
         button.disabled = true;
         try {
-            const res = await fetch('{{ url_for("api_ticket_mensajes", ticket_id=ticket.id) }}', {
+            const res = await fetch('{{ url_for("tickets.api_ticket_mensajes", ticket_id=ticket.id) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -625,7 +625,7 @@ async function actualizarResumenTicket() {
     if (document.hidden) return;
 
     try {
-        const res = await fetch('{{ url_for("api_ticket_resumen", ticket_id=ticket.id) }}', {
+        const res = await fetch('{{ url_for("tickets.api_ticket_resumen", ticket_id=ticket.id) }}', {
             headers: { 'X-Requested-With': 'fetch' }
         });
         if (!res.ok) return;
